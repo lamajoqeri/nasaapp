@@ -4,9 +4,9 @@
 
 Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 
-- Runs entirely in the browser. No backend, no account, works on a phone.
+- Runs entirely in the browser. No backend, no account.
 - Any coordinate on the Moon. 20 m terrain at the south pole's candidate regions, coarser terrain elsewhere.
-- Every number is checked against NASA sources, and the checks are in this repo.
+- The Sun and Earth geometry, the terrain horizons and the shadow predictions are checked against NASA sources, and the checks are in this repo.
 
 ## How it works
 
@@ -33,6 +33,8 @@ All of this is reproducible with the scripts in `prep/`; results are stored in `
 | Sun and Earth direction vs JPL Horizons, 5 sites x 20 dates | max error 0.00002 deg (Sun), 0.00012 deg (Earth) | `validate.py` |
 | Fast horizon search vs brute-force 10 m search | misses at most 0.04 deg | `validate.py` |
 | Fraction of time Sun / Earth visible vs NASA PGDA maps (Mazarico et al. 2011), 300 random points near Shackleton | mean error 1.5% (Sun, r = 0.96), 0.9% (Earth, r = 0.99) | `validate.py` |
+| Same, 60 points in each of the other four 20 m regions (rays cross into the coarse far-field terrain) | Sun 1.0-1.5%, Earth 0.6-2.4% | `validate.py` |
+| Same, 60 points where only 240 m terrain is available | Sun 3.3% (r = 0.83), Earth 1.6% | `validate.py` |
 | Sun elevation at the Apollo 11 touchdown | 10.70 deg (historical value 10.8 deg) | `checks.py` |
 | Predicted shadows vs real LRO NAC photos | see below | `bench.py` |
 | Uncertainty model vs 30 NASA Monte-Carlo terrain realisations | horizon spread and yearly-illumination spread matched after calibration (`calibration.json`) | `calib.py` |
@@ -51,7 +53,7 @@ We predict the shadow map at the moment each LRO Narrow Angle Camera photo was t
 Read these with their limits:
 - All photos are from 22 Sep to 11 Oct 2010 near Shackleton crater: one season, three Sun directions.
 - For the 2 known-time photos, the product uses the same pixel value for "no data" and "deep shadow". We had to assume the large dark area on the southern edge is shadow. That set is mostly sunlit ground with small shadows, which is why its scores are lower.
-- For the other 13, the archive does not record which of 7-8 listed observations each photo came from. We picked the best-matching one for every model separately. The date is unambiguous (candidate dates differ by more than 100 deg of Sun direction); within a date the choice can flatter a score slightly.
+- For the other 13, the archive does not record which of 7-8 listed observations each photo came from. We picked the best-matching one for every model separately. We tested that selection on the 2 known-time photos: it finds the right date decisively (IoU 0.46 vs 0.10-0.13 for wrong dates) but cannot tell observations on the same day apart, and picked the wrong same-day observation for one of the two. So the date is established, the exact observation is not; the same-day choice moves IoU by about 0.01.
 - Comparing illumination models with LRO photos is established practice (Mazarico et al. 2011, De Rosa et al. 2012, Gläser et al. 2014). This is our check of our own model, not a new benchmark.
 
 ## Known limits
@@ -62,10 +64,11 @@ Read these with their limits:
 - The uncertainty bands cover elevation-model error near the site only. They are a lower bound.
 - The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
 - Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
+- The battery model and the Deep Space Network table are simple and have unit tests only; they are not validated against an external source. The DSN table uses a 10 deg elevation mask and a simplified Earth rotation model.
 
 ## Run it
 
-Web app (needs Node 20+):
+Web app (needs Node 20+; lives on the `web-core` branch until it is merged to `main`):
 
 ```
 cd web

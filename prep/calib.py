@@ -9,6 +9,7 @@ the LOLA track geolocation error model. For one site we recompute the horizon on
 Only terrain within HALF m of the site is perturbed (window read over HTTP); beyond it the shipped DEM is used.
 """
 import json
+import subprocess
 import sys
 
 import numpy as np
@@ -18,8 +19,12 @@ from rasterio.windows import from_bounds
 from geom import DATA, Dem, horizon, horizon_draws, load_ephem, series, sp_fwd, uncertainty
 
 BASE = "/vsicurl/https://pgda.gsfc.nasa.gov/data/LOLA_5mpp/Site01/"
+ROOT = DATA.parent.parent.parent
 LAT, LON, MAST = -89.474, -137.414, 2.0  # Connecting Ridge site from sites.json
-HALF, N = 1500.0, 30
+HALF = 1500.0
+# sigma_h scale (x1.5) and the 45 deg correlation length were tuned on clones 1-30; this run reports on 31-60
+CLONES = range(31, 61)
+N = len(CLONES)
 
 
 class Patched:
@@ -46,7 +51,17 @@ class Patched:
 
 
 def read(name, x, y):
-    with rasterio.open(BASE + name) as d:
+    """Window read from a local copy (data/clones/); ranged HTTP reads from PGDA truncate too often."""
+    local = ROOT / "data/clones" / name.split("/")[-1]
+    if not local.exists():
+        local.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["curl", "-sfL", "-C", "-", "--retry", "8", "--retry-delay", "3", "--retry-all-errors",
+                        "-o", str(local), BASE.replace("/vsicurl/", "") + name], check=True)
+    return _read(local, x, y)
+
+
+def _read(path, x, y):
+    with rasterio.open(path) as d:
         win = from_bounds(x - HALF, y - HALF, x + HALF, y + HALF, d.transform)
         a = d.read(1, window=win).astype(float)
         t = rasterio.windows.transform(win, d.transform)
@@ -74,14 +89,14 @@ if __name__ == "__main__":
     year = lambda hor: float(series(dem, eph, i0, 8766, LAT, LON, MAST, hor=hor)["sun_frac"].mean())
 
     els, lit = [], []
-    for k in range(1, N + 1):
+    for k in CLONES:
         clone, *_ = read(f"Clones/Site01_final_adj_5mpp_{k:04d}_err.tif", x, y)
         field = clone - base20 if abs(np.nanmedian(clone)) > 100 else res + clone  # clone is a DEM, or an error field
         e, d, s = horizon(Patched(dem, field, x0, y0, px), LAT, LON, MAST)
         els.append(e)
         lit.append(year((e, d, s)))
-        if k == 1:
-            print(f"clone 1: median {np.nanmedian(clone):.1f} m, rms vs 5 m surf {np.nanstd(field - res):.2f} m")
+        if k == CLONES[0]:
+            print(f"first clone: median {np.nanmedian(clone):.1f} m, rms vs 5 m surf {np.nanstd(field - res):.2f} m")
         print(f"  clone {k}/{N}", file=sys.stderr)
     els, lit = np.array(els), np.array(lit)
 
@@ -91,7 +106,8 @@ if __name__ == "__main__":
     s = series(dem, eph, i0, 8766, LAT, LON, MAST, hor=(el20, dist20, sig20))
     mc = uncertainty(s, horizon_draws(el20, dist20, sig20, n=256))
     out = {
-        "site": {"lat": LAT, "lon": LON, "mast": MAST}, "clones": N, "window_half_m": HALF,
+        "site": {"lat": LAT, "lon": LON, "mast": MAST}, "clones": N, "clone_ids": [CLONES[0], CLONES[-1]],
+        "note": "model constants were tuned on clones 1-30; these numbers are from held-out clones", "window_half_m": HALF,
         "source": "NASA PGDA product 78 (Barker et al. 2021), Site01 5 m DEM and Monte-Carlo clones",
         "dem_5m_minus_20m_rms_m": round(float(np.nanstd(res)), 2), "toterr_median_m": round(float(np.nanmedian(toterr)), 2),
         "azimuths_set_in_window": int(near.sum()),

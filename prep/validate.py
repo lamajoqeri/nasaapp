@@ -68,9 +68,15 @@ def check_dense(dem, lat=-89.474, lon=-137.414):
     return {"site": [lat, lon], "max_missed_deg": round(float(diff.max()), 4), "mean_missed_deg": round(float(diff.mean()), 5)}
 
 
-def check_pgda(dem, n=300, seed=0):
+REGIONS = {  # (xmin, ymin, xmax, ymax) m, 2 km inside each 20 m tile; rays from the last four cross into the far tiers
+    "shackleton": (-28000, -28000, 8000, 8000), "mouton_nobile": (62000, 102000, 98000, 138000),
+    "malapert": (-8000, 113000, 8000, 129000), "haworth": (-46000, 82000, -30000, 98000),
+    "degerlache": (-45000, 7000, -29000, 23000)}
+
+
+def check_pgda(dem, box, n=300, seed=0):
     rng = np.random.default_rng(seed)
-    xs, ys = rng.uniform(-28000, 8000, n), rng.uniform(-28000, 8000, n)
+    xs, ys = rng.uniform(box[0], box[2], n), rng.uniform(box[1], box[3], n)
     v = EPH[::4]  # every 4 h over the whole 16-year table (PGDA: hourly over 18.6 years)
     ours, theirs = [], []
     with rasterio.open(ROOT / "data/AVGVISIB_85S_060M_201608.TIF") as ps, \
@@ -101,6 +107,16 @@ def check_pgda(dem, n=300, seed=0):
 
 if __name__ == "__main__":
     dem = Dem()
-    res = {"horizons": check_horizons(), "dense_march": check_dense(dem), "pgda": check_pgda(dem)}
+    res = {"horizons": check_horizons(), "dense_march": check_dense(dem), "pgda": check_pgda(dem, REGIONS["shackleton"]),
+           "pgda_other_regions": {}}
+    for name, box in list(REGIONS.items())[1:]:
+        print(name)
+        r = check_pgda(dem, box, n=60, seed=1)
+        del r["points"]
+        res["pgda_other_regions"][name] = r
+    r = check_pgda(dem, (100000, -60000, 140000, -20000), n=60, seed=2)
+    del r["points"]
+    r["note"] = "region with no 20 m tile: 240 m terrain only vs PGDA 60 m pixels; mast 0"
+    res["pgda_240m_only_region"] = r
     (DATA / "validation.json").write_text(json.dumps(res))
     print("wrote validation.json")

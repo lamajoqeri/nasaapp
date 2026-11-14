@@ -102,7 +102,7 @@ def export_series(dem):
     meta, eph = load_ephem()
     dsn = np.fromfile(DATA / "dsn.bin", dtype=np.uint8)
     out = []
-    for sid, lat, lon, mast, t in [("connecting_ridge", -89.474, -137.414, 2.0, "2027-01-01T00:00:00"),
+    for sid, lat, lon, mast, t in [("connecting_ridge", -89.474, -137.414, 2.0, "2027-06-20T00:00:00"),  # winter: has sunsets
                                    ("malapert", -85.9891, 0.238, 2.0, "2028-06-10T00:00:00"),
                                    ("apollo11", 0.6741, 23.473, 2.0, "2030-03-01T00:00:00")]:
         i0 = int((np.datetime64(t) - np.datetime64(meta["t0"][:-1])) / np.timedelta64(1, "s") / meta["step_s"])
