@@ -15,6 +15,10 @@ B. ESALL_CR1 (7 images) and ESALL_SR12 (6 images), 2 m. Footprints are unambiguo
    we pick, for every model separately, the candidate time that scores best on a coarse grid. Candidates from
    different dates differ by >100 deg of Sun azimuth, so the date is identified unambiguously; candidates on
    the same date differ by ~1-2 deg, which is where the best-of selection can flatter a score slightly.
+   Tested on the two known-time images with the same 8 candidates: the right date wins decisively (coarse
+   IoU 0.46 vs 0.10-0.13 for the other dates) but the matcher cannot tell same-day observations apart
+   (0.467 / 0.462 / 0.459, and it picked the wrong one of the three for one image). So for group B the date
+   is established, the exact observation is not, and same-day choice moves IoU by about 0.01.
 
 Photo shadow = block-mean DN < 5% of full scale (De Rosa et al. 2012). Model shadow = visible Sun fraction < 0.5.
 All images are from 22 Sep - 11 Oct 2010 (southern spring), so there is no seasonal spread.

@@ -180,3 +180,10 @@ New, all optional to use:
 - Battery survival: `battery()` in `prep/geom.py`, spec in CONTRACT.md. Defaults 200 W panel, 100 W load, 1500 Wh.
 - `bench/` is being regenerated with 15 images instead of 2 (three different Sun directions). **File names changed**: read them from `bench/index.json` (`images[].photo`, `images[].model`), do not hard-code. `index.json` now also has `summary` (mean IoU per model per group) and each image has `group`: `known_time` (headline, 2 images) or `matched_time` (13 images whose capture time was identified by best match; disclosed in `method`).
 - `prep/checks.py` — 10 s regression run for the Python side (math, fixture, DEM edges, metrics, battery, Apollo 11).
+
+## Update Sat 13:50 PST — from Account A
+
+- **Uncertainty bands are narrow.** Measured, calibrated values: yearly % lit at the Connecting Ridge is 86.5% +- 0.2%; per-lunar-day values in `series_check.json` are +- 0.2-0.3%. The "73% +- 6%" in older text was an invented example. Design the UI for bands of a few tenths of a percent near 20 m tiles: show them as "+- 0.2%" text and a thin band, and say what they cover (elevation-model error near the site, a lower bound). The much bigger sensitivity is position: nudge the site 100 m and numbers move by tens of percent. That is the thing to visualise.
+- `fixture/series_check.json` regenerated: Connecting Ridge now uses a winter lunar day (t0 2027-06-20) so it contains sunsets (83% lit, 73 h longest darkness, sunset in 204 h). Re-run your cross-check test.
+- `validation.json` gained `pgda_other_regions` (4 more regions) and `pgda_240m_only_region`. `bench/index.json` gained `time_matching_check`. `CONTRACT.md` now has a single `bench/index.json` schema.
+- `README.md` on main is written (method, validation table, limits, data credits, AI disclosure). Add the live URL and screenshots when deployed; fix the "Run it" section if your commands differ.

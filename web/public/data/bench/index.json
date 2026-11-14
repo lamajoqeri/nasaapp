@@ -1,6 +1,6 @@
 {
  "source": "LROC NAC DTM orthoimages (SHACKRDGE02 3.5 m; ESALL_CR1, ESALL_SR12 2 m), LRO/LROC, NASA/GSFC/ASU",
- "method": "Two groups of images, all polar stereographic orthoimages from LROC NAC DTM products:\n\nA. SHACKRDGE02 (2 images, 3.5 m). Each file is named after its source image, so the capture time is known.\n   These give the headline numbers. Weakness: DN 0 means both \"no data\" and deep shadow. We evaluate inside\n   the convex hull of non-zero pixels minus the straight-edged footprint notches on the top and left edges\n   (hand rule in footprint()), and count the remaining zeros as shadow. The large dark area on the southern\n   edge is therefore assumed to be shadow.\n\nB. ESALL_CR1 (7 images) and ESALL_SR12 (6 images), 2 m. Footprints are unambiguous (shadows are dim but\n   non-zero), and the images span three dates with Sun directions ~140 and ~215 deg apart. Weakness: the\n   labels do not say which source image each orthoimage came from. Each product lists 7-8 source observations;\n   we pick, for every model separately, the candidate time that scores best on a coarse grid. Candidates from\n   different dates differ by >100 deg of Sun azimuth, so the date is identified unambiguously; candidates on\n   the same date differ by ~1-2 deg, which is where the best-of selection can flatter a score slightly.\n\nPhoto shadow = block-mean DN < 5% of full scale (De Rosa et al. 2012). Model shadow = visible Sun fraction < 0.5.\nAll images are from 22 Sep - 11 Oct 2010 (southern spring), so there is no seasonal spread.",
+ "method": "Two groups of images, all polar stereographic orthoimages from LROC NAC DTM products:\n\nA. SHACKRDGE02 (2 images, 3.5 m). Each file is named after its source image, so the capture time is known.\n   These give the headline numbers. Weakness: DN 0 means both \"no data\" and deep shadow. We evaluate inside\n   the convex hull of non-zero pixels minus the straight-edged footprint notches on the top and left edges\n   (hand rule in footprint()), and count the remaining zeros as shadow. The large dark area on the southern\n   edge is therefore assumed to be shadow.\n\nB. ESALL_CR1 (7 images) and ESALL_SR12 (6 images), 2 m. Footprints are unambiguous (shadows are dim but\n   non-zero), and the images span three dates with Sun directions ~140 and ~215 deg apart. Weakness: the\n   labels do not say which source image each orthoimage came from. Each product lists 7-8 source observations;\n   we pick, for every model separately, the candidate time that scores best on a coarse grid. Candidates from\n   different dates differ by >100 deg of Sun azimuth, so the date is identified unambiguously; candidates on\n   the same date differ by ~1-2 deg, which is where the best-of selection can flatter a score slightly.\n   Tested on the two known-time images with the same 8 candidates: the right date wins decisively (coarse\n   IoU 0.46 vs 0.10-0.13 for the other dates) but the matcher cannot tell same-day observations apart\n   (0.467 / 0.462 / 0.459, and it picked the wrong one of the three for one image). So for group B the date\n   is established, the exact observation is not, and same-day choice moves IoU by about 0.01.\n\nPhoto shadow = block-mean DN < 5% of full scale (De Rosa et al. 2012). Model shadow = visible Sun fraction < 0.5.\nAll images are from 22 Sep - 11 Oct 2010 (southern spring), so there is no seasonal spread.",
  "baselines": {
   "flat": "smooth sphere, no terrain",
   "slope_only": "local slope within 60 m, no cast shadows",
@@ -1238,5 +1238,18 @@
     }
    }
   }
- ]
+ ],
+ "time_matching_check": {
+  "what": "best-match selection run on the two images whose capture time is known, 8 candidates",
+  "date_recovered": "2 of 2",
+  "exact_observation_recovered": "1 of 2",
+  "coarse_iou_true_date": [
+   0.455,
+   0.467
+  ],
+  "coarse_iou_other_dates": [
+   0.104,
+   0.127
+  ]
+ }
 }

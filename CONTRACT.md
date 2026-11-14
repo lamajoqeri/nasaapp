@@ -139,10 +139,6 @@ Synthetic test data in the same formats: `fixture/dem/manifest.json` (+ one tile
 
 Both `prep/geom.py` and `web/src/core/` must reproduce these numbers from the artifacts.
 
-### `bench/`
-
-`bench/index.json`: `[{"id", "utc", "sun_az", "sun_el", "photo": "x.png", "model": "x_model.png", "bounds": [x_min, y_min, x_max, y_max], "scores": {"flat": {"iou", "f1"}, "dem240": {...}, "ours": {...}}}]`. Bounds in spstere meters.
-
 ### `dsn.bin`
 
 `Uint8[n]`, one byte per ephem step (same `t0`, `step_s`, `n` as `ephem.bin`). Bit 0 Goldstone, bit 1 Madrid, bit 2 Canberra:
@@ -155,9 +151,9 @@ Written by `prep/validate.py`, for the "how do we know" panel:
 `horizons.max_sep_deg.{sun,earth}` (vs JPL Horizons, 100 samples each), `dense_march.max_missed_deg`,
 `pgda.{sun,earth}.{mae,bias,r}` and `pgda.points` = `[ourSun, ourEarth, pgdaSun, pgdaEarth]` fractions at 300 random points (scatter plot).
 
-### `bench/index.json` (actual shape)
+### `bench/index.json`
 
-`{source, method, baselines: {name: description}, images: [{id, utc, sun_az, sun_el, photo, model, bounds, shadow_fraction_photo, registration_shift_m, scores: {flat|slope_only|dem240|ours: {iou, f1, accuracy}}, scores_unregistered}]}`.
+`{source, method, baselines: {name: description}, summary: {known_time|matched_time: {n, flat|dem240|slope_only|ours: {iou, accuracy}}}, time_matching_check, images: [{id, group, source_image, utc, sun_az, sun_el, photo, model, bounds, shadow_fraction_photo, registration_shift_m, scores: {flat|slope_only|dem240|ours: {iou, f1, accuracy}}, scores_unregistered, time_matching?}]}`. `bounds` in spstere meters.
 `photo` and `model` are same-extent grayscale PNGs for the draggable split view.
 
 ### `calibration.json`
