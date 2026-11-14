@@ -7,6 +7,8 @@ export type { Horizon, Metrics, Series, Site, Uncertainty };
 
 export type Request =
   | { type: 'range' }
+  /** Moon-fixed (MOON_ME) Sun and Earth vectors in km from the Moon centre at t (ms, clamped to the table). */
+  | { type: 'sunVector'; t: number }
   /** Series + metrics over [t, t + days] (default 29.5 d, hourly), with Monte Carlo unless mc === false. */
   | { type: 'scenario'; site: Site; t: number; days?: number; stepMs?: number; mc?: boolean; earthMargin?: number }
   /** Compact lit / Earth-visible arrays for heat-strips (e.g. a year at 1 h). */
@@ -42,6 +44,7 @@ function call<T>(req: Request): Promise<T> {
 export const core = {
   /** Valid ephemeris range in ms. Clamp every date picker to it. */
   range: () => call<{ t0: number; t1: number }>({ type: 'range' }),
+  sunVector: (t: number) => call<{ sun: [number, number, number]; earth: [number, number, number] }>({ type: 'sunVector', t }),
   scenario: (site: Site, t: number, opts: { days?: number; stepMs?: number; mc?: boolean; earthMargin?: number } = {}) =>
     call<ScenarioResult>({ type: 'scenario', site, t, ...opts }),
   strip: (site: Site, t0: number, t1: number, opts: { stepMs?: number; earthMargin?: number } = {}) =>

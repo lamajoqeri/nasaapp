@@ -44,6 +44,10 @@ async function handle(req: Request): Promise<unknown> {
   switch (req.type) {
     case 'range':
       return { t0: eph.t0, t1: eph.t1 };
+    case 'sunVector': {
+      const v = eph.at(req.t);
+      return { sun: [v[0], v[1], v[2]], earth: [v[3], v[4], v[5]] };
+    }
     case 'scenario': {
       const h = await hor(req.site);
       // No silent clamp: a shifted or truncated window would be compared as if it were the asked-for one.
