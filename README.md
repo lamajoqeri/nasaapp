@@ -37,7 +37,7 @@ All of this is reproducible with the scripts in `prep/`; results are stored in `
 | Same, 60 points where only 240 m terrain is available | Sun 3.3% (r = 0.83), Earth 1.6% | `validate.py` |
 | Sun elevation at the Apollo 11 touchdown | 10.70 deg (historical value 10.8 deg) | `checks.py` |
 | Predicted shadows vs real LRO NAC photos | see below | `bench.py` |
-| Uncertainty model vs 30 NASA Monte-Carlo terrain realisations | horizon spread and yearly-illumination spread matched after calibration (`calibration.json`) | `calib.py` |
+| Uncertainty model vs NASA Monte-Carlo terrain realisations (tuned on 30, tested on 30 others) | on the held-out set: horizon spread 0.052 deg (NASA) vs 0.046 deg (ours); spread of yearly % lit 0.24% (NASA) vs 0.16% (ours), so our bands are about 1.5x too narrow; mean yearly % lit 86.1% (NASA) vs 86.5% (ours) | `calib.py` |
 
 ### Shadows against real photos
 
@@ -61,7 +61,7 @@ Read these with their limits:
 - 20 m terrain exists for five south-pole regions (Shackleton / Connecting Ridge, Mons Mouton / Nobile, Malapert, Haworth, de Gerlache). The rest of 80S-90S uses 240 m terrain, and the rest of the Moon about 3.8 km, so horizons there are smoother than reality.
 - At the pole, results change over tens of meters. Moving a site 100 m can change Earth visibility from 0% to 50% of the time. A coordinate typed to two decimals is not a landing site.
 - Earth visibility uses Earth's centre. NASA's published maps count any part of Earth's disk (0.95 deg radius), so their percentages are higher.
-- The uncertainty bands cover elevation-model error near the site only. They are a lower bound.
+- The uncertainty bands cover elevation-model error near the site only, were calibrated at one site, and came out about 1.5x narrower than NASA's own terrain realisations imply on held-out data. Treat them as a lower bound. The offset between our 20 m result and the 5 m terrain (0.1-0.4% of yearly illumination here) is larger than the band itself.
 - The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
 - Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
 - The battery model and the Deep Space Network table are simple and have unit tests only; they are not validated against an external source. The DSN table uses a 10 deg elevation mask and a simplified Earth rotation model.

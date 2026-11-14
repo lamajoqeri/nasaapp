@@ -187,3 +187,4 @@ New, all optional to use:
 - `fixture/series_check.json` regenerated: Connecting Ridge now uses a winter lunar day (t0 2027-06-20) so it contains sunsets (83% lit, 73 h longest darkness, sunset in 204 h). Re-run your cross-check test.
 - `validation.json` gained `pgda_other_regions` (4 more regions) and `pgda_240m_only_region`. `bench/index.json` gained `time_matching_check`. `CONTRACT.md` now has a single `bench/index.json` schema.
 - `README.md` on main is written (method, validation table, limits, data credits, AI disclosure). Add the live URL and screenshots when deployed; fix the "Run it" section if your commands differ.
+- `calibration.json` is now in the repo (held-out clones 31-60): horizon spread 0.052 deg NASA vs 0.046 deg ours; yearly % lit spread 0.24% NASA vs 0.16% ours. Label the bands "terrain-model uncertainty, lower bound". No constant changed since the 45 deg update.

@@ -11,10 +11,9 @@ Only terrain within HALF m of the site is perturbed (window read over HTTP); bey
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-import rasterio
-from rasterio.windows import from_bounds
 
 from geom import DATA, Dem, horizon, horizon_draws, load_ephem, series, sp_fwd, uncertainty
 
@@ -50,30 +49,48 @@ class Patched:
         return h
 
 
-def read(name, x, y):
-    """Window read from a local copy (data/clones/); ranged HTTP reads from PGDA truncate too often."""
-    local = ROOT / "data/clones" / name.split("/")[-1]
-    if not local.exists():
-        local.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["curl", "-sfL", "-C", "-", "--retry", "8", "--retry-delay", "3", "--retry-all-errors",
-                        "-o", str(local), BASE.replace("/vsicurl/", "") + name], check=True)
-    return _read(local, x, y)
+URL = BASE.replace("/vsicurl/", "")
+W = 3200  # Site01 rasters: 3200 x 3200 float32, uncompressed, one row per strip, 5 m, top-left (-19000, -4000)
+TX0, TY0, PX = -19000.0, -4000.0, 5.0
 
 
-def _read(path, x, y):
-    with rasterio.open(path) as d:
-        win = from_bounds(x - HALF, y - HALF, x + HALF, y + HALF, d.transform)
-        a = d.read(1, window=win).astype(float)
-        t = rasterio.windows.transform(win, d.transform)
-        return a, t.c + t.a / 2, t.f + t.e / 2, t.a  # array, x/y of pixel (0,0) centre, pixel size
+def fetch_rows(name, r0, r1, kind):
+    """Rows r0..r1 of a remote raster via HTTP byte ranges, in 1 MB chunks with retries: PGDA is slow and
+    drops connections, and only ~1/5 of each 41 MB file is needed."""
+    out = ROOT / "data/clones" / (name.split("/")[-1] + f".rows{r0}-{r1}.bin")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    size = (r1 - r0) * W * 4
+    if not (out.exists() and out.stat().st_size == size):
+        # pixel data runs to the end of the file, but header length differs between files by a few bytes
+        head = subprocess.run(["curl", "-sfI", "--retry", "8", "--retry-all-errors", URL + name], capture_output=True, text=True).stdout
+        length = int([l.split(":")[1] for l in head.splitlines() if l.lower().startswith("content-length")][-1])
+        start = length - W * W * 4 + r0 * W * 4
+        buf, tries = b"", 0
+        while len(buf) < size:
+            tries += 1
+            if tries > 300:
+                raise RuntimeError(f"gave up on {name}")
+            a = start + len(buf)
+            r = subprocess.run(["curl", "-sf", "--max-time", "120", "-r", f"{a}-{min(a + 2**20, start + size) - 1}", URL + name],
+                               capture_output=True)
+            buf += r.stdout  # keep whatever arrived, ask for the rest
+        out.write_bytes(buf[:size])
+    return np.frombuffer(out.read_bytes(), dtype="<f4").reshape(r1 - r0, W).astype(float)
+
+
+def read(name, x, y, kind="clone"):
+    r0, c0 = int(round((TY0 - (y + HALF)) / PX)), int(round((x - HALF - TX0) / PX))
+    n = int(round(2 * HALF / PX))
+    a = fetch_rows(name, r0, r0 + n, kind)[:, c0:c0 + n]
+    return a, TX0 + (c0 + 0.5) * PX, TY0 - (r0 + 0.5) * PX, PX  # array, x/y of pixel (0,0) centre, pixel size
 
 
 if __name__ == "__main__":
     dem = Dem()
     meta, eph = load_ephem()
     x, y = sp_fwd(LAT, LON)
-    surf, x0, y0, px = read("Site01_final_adj_5mpp_surf.tif", x, y)
-    toterr, *_ = read("Site01_final_adj_5mpp_toterr.tif", x, y)
+    surf, x0, y0, px = read("Site01_final_adj_5mpp_surf.tif", x, y, "surf")
+    toterr, *_ = read("Site01_final_adj_5mpp_toterr.tif", x, y, "toterr")
     yy, xx = np.mgrid[0:surf.shape[0], 0:surf.shape[1]]
     lat5, lon5 = __import__("geom").sp_inv(x0 + xx * px, y0 - yy * px)
     base20 = dem.sample(lat5, lon5)
@@ -88,10 +105,14 @@ if __name__ == "__main__":
     i0 = int((np.datetime64("2027-01-01") - np.datetime64(meta["t0"][:-1])) / np.timedelta64(1, "s") / meta["step_s"])
     year = lambda hor: float(series(dem, eph, i0, 8766, LAT, LON, MAST, hor=hor)["sun_frac"].mean())
 
+    names = {k: f"Clones/Site01_final_adj_5mpp_{k:04d}_err.tif" for k in CLONES}
+    with ThreadPoolExecutor(10) as ex:  # prefetch in parallel
+        list(ex.map(lambda nm: read(nm, x, y), names.values()))
     els, lit = [], []
     for k in CLONES:
         clone, *_ = read(f"Clones/Site01_final_adj_5mpp_{k:04d}_err.tif", x, y)
         field = clone - base20 if abs(np.nanmedian(clone)) > 100 else res + clone  # clone is a DEM, or an error field
+        assert np.isfinite(clone).all() and np.std(clone - surf) < 2, f"clone {k} looks misread"
         e, d, s = horizon(Patched(dem, field, x0, y0, px), LAT, LON, MAST)
         els.append(e)
         lit.append(year((e, d, s)))
