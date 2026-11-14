@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { Dem } from './dem';
-import { Ephem } from './ephem';
+import { Ephem, pickEphem } from './ephem';
 import { azel, offset, unit, R } from './geom';
 import { horizon } from './horizon';
 import { metrics, series } from './series';
@@ -116,5 +116,24 @@ describe('real site sanity', () => {
     console.log(`horizon ${ms.toFixed(0)} ms; lit ${m.pctLit.toFixed(1)}% earth ${m.pctEarth.toFixed(1)}% longest dark ${m.longestDarkHours} h; MC lit ${u.mean.pctLit.toFixed(1)}±${u.std.pctLit.toFixed(1)}`);
     expect(Math.max(...s.sunEl)).toBeLessThan(2.5);
     expect(m.pctAnyLit).toBeGreaterThan(60);
+  });
+});
+
+describe('Apollo ephemeris table', () => {
+  it('loads, is picked for 1969, and puts the Sun ~10–11° up at Tranquility Base on landing', async () => {
+    const apollo = new Ephem(await json('ephem_apollo.json'), await buf('ephem_apollo.bin'));
+    const main = new Ephem(await json('ephem.json'), await buf('ephem.bin'));
+    expect(apollo.t0).toBe(Date.parse('1969-07-01T00:00:00Z'));
+    expect(apollo.t1).toBe(Date.parse('1973-01-01T00:00:00Z'));
+    const t = Date.parse('1969-07-20T20:17:40Z');
+    // compare t0, not objects: a failing toBe would pretty-print megabyte arrays
+    expect(pickEphem([apollo, main], t).t0).toBe(apollo.t0);
+    expect(pickEphem([apollo, main], Date.parse('2030-01-01T00:00:00Z')).t0).toBe(main.t0);
+    expect(pickEphem([apollo, main], Date.parse('1980-01-01T00:00:00Z')).t0).toBe(apollo.t0); // nearest
+    const v = pickEphem([apollo, main], t).at(t);
+    const sun = azel(0.6741, 23.473, 0, v[0], v[1], v[2]);
+    console.log(`Apollo 11 landing: Sun el ${sun.el.toFixed(2)}°, az ${sun.az.toFixed(1)}°`);
+    expect(sun.el).toBeGreaterThan(9.5);
+    expect(sun.el).toBeLessThan(11.5);
   });
 });

@@ -22,6 +22,8 @@ export class Ephem {
     return Math.max(this.t0, Math.min(this.t1, t));
   }
 
+  get hasDsn(): boolean { return !!this.dsn; }
+
   /** DSN station bits at the nearest step (0 when dsn.bin was not given). */
   dsnAt(t: number): number {
     if (!this.dsn) return 0;
@@ -36,4 +38,10 @@ export class Ephem {
     for (let j = 0; j < 6; j++) out[j] = this.a[i0 * 6 + j] * (1 - f) + this.a[(i0 + 1) * 6 + j] * f;
     return out;
   }
+}
+
+/** The table covering t, else the one nearest to it. */
+export function pickEphem(tables: Ephem[], t: number): Ephem {
+  const d = (e: Ephem) => Math.max(e.t0 - t, t - e.t1, 0);
+  return tables.reduce((a, b) => (d(b) < d(a) ? b : a));
 }

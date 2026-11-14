@@ -87,3 +87,11 @@ table.how td { text-align: left; }
 table.how th { width: 55%; }
 canvas.scatter { max-width: 420px; margin: 8px auto 0; }
 table.how tr:first-child th { font-size: inherit; }
+.mapbox { margin-top: 10px; max-width: 460px; }
+.maphead { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.maphead .for { flex: 1 1 100%; font-size: 13px; color: var(--muted); }
+.maphead .for b { color: var(--accent); }
+.maphead select { flex: 1; min-width: 0; }
+canvas.map { cursor: crosshair; touch-action: manipulation; }
+.maplegend { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.col.active { border-color: var(--accent); }

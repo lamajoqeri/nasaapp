@@ -54,7 +54,7 @@ export function rows(m: Metrics, u: Uncertainty | null): Row[] {
     { label: 'Sunlit, 29.5 d', text: pct(lit), sd: sd('pctLit', pct), num: lit, f: pct, eps: 0.5, good: 1 },
     { label: 'Longest dark', text: longest ? dur(longest) : 'none', sd: sd('longestDarkHours', dur), num: longest, f: dur, eps: 0.5, good: -1 },
     { label: 'Direct-to-Earth', text: `${dur(dte)} (${pct((100 * dte) / WIN_H)})`, sd: sd('dteHours', dur), num: dte, f: dur, eps: 0.5, good: 1 },
-    { label: 'Comms (DSN)', text: `${dur(comms)} (${pct((100 * comms) / WIN_H)})`, sd: sd('commsHours', dur), num: comms, f: dur, eps: 0.5, good: 1 },
+    { label: 'Comms (DSN)', text: Number.isFinite(comms) ? `${dur(comms)} (${pct((100 * comms) / WIN_H)})` : 'n/a before 2024', sd: sd('commsHours', dur), num: comms, f: dur, eps: 0.5, good: 1 },
   ];
 }
 
@@ -64,6 +64,7 @@ export function delta(base: Row, slip: Row): { text: string; cls: string } {
     return { text: `→ ${slip.label.toLowerCase()} ${slip.text}`, cls: slip.ok ? 'good' : 'bad' };
   }
   const d = (slip.num ?? 0) - (base.num ?? 0);
+  if (Number.isNaN(d)) return { text: '–', cls: 'same' };
   if (Math.abs(d) < base.eps) return { text: '=', cls: 'same' };
   return { text: (d > 0 ? '+' : '−') + base.f(Math.abs(d)), cls: base.good === 0 ? '' : d * base.good > 0 ? 'good' : 'bad' };
 }

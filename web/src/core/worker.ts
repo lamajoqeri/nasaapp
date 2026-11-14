@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { Dem } from './dem';
-import { Ephem } from './ephem';
+import { Ephem, pickEphem } from './ephem';
 import { horizon, type Horizon } from './horizon';
 import { monteCarlo } from './mc';
 import { metrics, series, type Site } from './series';
@@ -13,15 +13,22 @@ const get = async (p: string) => {
   return r.arrayBuffer();
 };
 
-let ready: Promise<{ dem: Dem; eph: Ephem }> | null = null;
-const init = () => (ready ??= (async () => {
-  const [dem, meta, bin, dsn] = await Promise.all([
-    Dem.open((f) => get('dem/' + f)),
-    get('ephem.json').then((b) => JSON.parse(new TextDecoder().decode(b))),
-    get('ephem.bin'),
-    get('dsn.bin'),
+const table = async (name: string, dsn?: string) => {
+  const [meta, bin, d] = await Promise.all([
+    get(name + '.json').then((b) => JSON.parse(new TextDecoder().decode(b))), get(name + '.bin'), dsn ? get(dsn) : undefined,
   ]);
-  return { dem, eph: new Ephem(meta, bin, dsn) };
+  return new Ephem(meta, bin, d);
+};
+
+/** Ephemeris tables in time order: Apollo 1969–1973 (optional per CONTRACT) then 2024–2040. */
+let ready: Promise<{ dem: Dem; ephs: Ephem[] }> | null = null;
+const init = () => (ready ??= (async () => {
+  const [dem, apollo, main] = await Promise.all([
+    Dem.open((f) => get('dem/' + f)),
+    table('ephem_apollo').catch(() => null),
+    table('ephem', 'dsn.bin'), // dsn.bin is aligned with the 2024–2040 table only
+  ]);
+  return { dem, ephs: apollo ? [apollo, main] : [main] };
 })().catch((e) => { ready = null; throw e; }));
 
 // ponytail: unbounded cache, fine for a session's handful of sites; LRU if people script hundreds
@@ -41,24 +48,30 @@ async function hor(site: Site): Promise<Horizon> {
 }
 
 async function handle(req: Request): Promise<unknown> {
-  const { eph } = await init();
+  const { ephs } = await init();
   switch (req.type) {
-    case 'range':
-      return { t0: eph.t0, t1: eph.t1 };
+    case 'range': {
+      const main = ephs[ephs.length - 1];
+      return { t0: main.t0, t1: main.t1, ranges: ephs.map((e) => ({ t0: e.t0, t1: e.t1 })) };
+    }
     case 'scenario': {
       const h = await hor(req.site);
       // No silent clamp: a shifted or truncated window would be compared as if it were the asked-for one.
-      const t0 = req.t, t1 = t0 + (req.days ?? 29.5) * 86400e3;
-      if (t0 < eph.t0 || t1 > eph.t1) throw new Error('window is outside the 2024–2040 ephemeris');
+      const t0 = req.t, t1 = t0 + (req.days ?? 29.5) * 86400e3, eph = pickEphem(ephs, t0);
+      if (t0 < eph.t0 || t1 > eph.t1) throw new Error('window is outside the ephemeris (1969-07-01..1973-01-01, 2024–2040)');
       const s = series(eph, req.site, h, t0, t1, req.stepMs ?? 3600e3, req.earthMargin ?? 0);
       const m = metrics(s);
       const u = req.mc === false ? null : monteCarlo(s, h, req.earthMargin ?? 0);
+      if (!eph.hasDsn) { // no DSN table outside 2024–2040
+        m.commsHours = NaN;
+        if (u) u.mean.commsHours = u.std.commsHours = NaN;
+      }
       const res: ScenarioResult = { horizon: h, series: s, metrics: m, uncertainty: u };
       return res;
     }
     case 'strip': {
       const h = await hor(req.site);
-      const t0 = eph.clamp(req.t0), t1 = eph.clamp(req.t1);
+      const eph = pickEphem(ephs, req.t0), t0 = eph.clamp(req.t0), t1 = eph.clamp(req.t1);
       const s = series(eph, req.site, h, t0, t1, req.stepMs ?? 3600e3, req.earthMargin ?? 0);
       const res: StripResult = { t0, stepMs: s.stepMs, sunFrac: s.sunFrac, earthVis: s.earthVis };
       return res;
