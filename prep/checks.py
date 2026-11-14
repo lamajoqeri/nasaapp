@@ -7,7 +7,7 @@ import numpy as np
 import spiceypy as sp
 
 import ephem
-from geom import (DATA, Dem, R, azel, enu, horizon, horizon_at, horizon_draws, load_ephem, metrics, schedule,
+from geom import (DATA, Dem, R, azel, battery, enu, horizon, horizon_at, horizon_draws, load_ephem, metrics, schedule,
                   series, sp_fwd, sp_inv, sun_frac, uncertainty, unit)
 
 FIX = DATA / "fixture"
@@ -92,6 +92,9 @@ def test_metrics():
     assert m["comms_hours"] == 38 and m["longest_no_earth_h"] == 5 and m["hours_to_earthset"] == 0
     s["sun_frac"] = np.ones(n)
     assert metrics(s)["hours_to_sunset"] is None and metrics(s)["longest_dark_h"] == 0
+    soc, dead = battery(np.r_[np.ones(5), np.zeros(20)], panel_w=200, load_w=100, capacity_wh=1000, soc0=0.5)
+    assert soc[4] == 1.0 and dead == 15 and soc[-1] == 0  # charges to full in 5 h, then 1000 Wh / 100 W = 10 h
+    assert battery(np.ones(10))[1] is None
 
 
 def export_series(dem):
@@ -112,6 +115,8 @@ def export_series(dem):
                     "horizon_el_every_10deg": [round(float(x), 3) for x in el[::20]],
                     "sun_frac": [round(float(x), 4) for x in s["sun_frac"]],
                     "earth_el_minus_horizon": [round(float(x), 3) for x in s["earth_el"] - horizon_at(el, s["earth_az"])],
+                    "battery_default": {"survival_h": battery(s["sun_frac"])[1],
+                                        "min_soc": round(float(battery(s["sun_frac"])[0].min()), 4)},
                     "metrics": m, "pct_lit_mean": round(u["pct_lit_mean"], 4), "pct_lit_std": round(u["pct_lit_std"], 4),
                     "p_lit_min_max": [round(float(u["p_lit"].min()), 3), round(float(u["p_lit"].max()), 3)]})
         print(f"  {sid:17s} lit {m['pct_lit']:.3f} +- {u['pct_lit_std']:.3f}  dark {m['longest_dark_h']:.0f} h  "

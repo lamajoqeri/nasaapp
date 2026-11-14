@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = DATA / "dem"
 SRC20 = "/vsicurl/https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF"
 ERR20 = "/vsicurl/https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_20MPP_ADJ_ERR.TIF"
+# LOLA error-map median x 1.5: matches the horizon spread of NASA's Monte-Carlo DEM clones (prep/calib.py)
+SIGMA_CAL = 1.5
 # id: (xmin, ymin, xmax, ymax) in polar stereographic meters
 TILES20 = {
     "shackleton_20m": (-30000, -30000, 10000, 10000),    # Shackleton, connecting ridge
@@ -48,7 +50,7 @@ if __name__ == "__main__":
             win = from_bounds(x0, y0, x1, y1, d.transform)
             sig = float(np.nanmedian(e.read(1, window=win)))
             tiles.append(quantize(d.read(1, window=win), tid, {
-                "proj": "spstere", "x0": x0 + 10, "y0": y1 - 10, "px": 20, "sigma_h": round(sig, 2)}))
+                "proj": "spstere", "x0": x0 + 10, "y0": y1 - 10, "px": 20, "sigma_h": round(sig * SIGMA_CAL, 2)}))
             print(tid, tiles[-1]["w"], tiles[-1]["scale"], "sigma_h", tiles[-1]["sigma_h"])
 
     with rasterio.open(ROOT / "data/LDEM_80S_80MPP_ADJ.TIF") as d:

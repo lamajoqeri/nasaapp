@@ -78,7 +78,8 @@ Definitions used by metrics: **dark** = `sunFrac == 0`; **sunset** = next time `
 ### Uncertainty (horizon space)
 
 `sigma_el[i] = atan(sigma_h / dist[i])` with `sigma_h` from the manifest tile that set the max.
-Draw N = 64 Gaussian offsets per azimuth, smooth over 5 deg of azimuth (renormalise to unit variance), add `offset * sigma_el`.
+Draw N = 64 Gaussian offsets per azimuth, boxcar-smooth over **45 deg** of azimuth (90 bins, circular; divide by sqrt(90) to keep unit variance), add `offset * sigma_el`.
+The 45 deg correlation length and the 20 m tiles' `sigma_h` (LOLA error map x 1.5) are calibrated so that both the per-azimuth horizon spread and the spread of yearly % lit match NASA's Monte-Carlo DEM clones at the Connecting Ridge (`prep/calib.py`, `calibration.json`). Only near-field terrain was perturbed in that calibration, so the bands are a lower bound.
 `P(lit)(t)` = mean over draws of `sunFrac > 0`; report mean and std of every metric over draws.
 
 ## Artifacts (`web/public/data/`)
@@ -158,3 +159,32 @@ Written by `prep/validate.py`, for the "how do we know" panel:
 
 `{source, method, baselines: {name: description}, images: [{id, utc, sun_az, sun_el, photo, model, bounds, shadow_fraction_photo, registration_shift_m, scores: {flat|slope_only|dem240|ours: {iou, f1, accuracy}}, scores_unregistered}]}`.
 `photo` and `model` are same-extent grayscale PNGs for the draggable split view.
+
+### `calibration.json`
+
+Written by `prep/calib.py`: our uncertainty model vs 30 NASA Monte-Carlo DEM realisations (PGDA product 78) at the Connecting Ridge site.
+`horizon_sigma_deg.{clones_median, model_median, ratio_clones_over_model}`, `pct_lit_year.{clones_std, model_mc_std, ...}`,
+`horizon_5m_vs_20m_deg` (what the 20 m tile misses relative to the 5 m DEM).
+
+### `ephem_apollo.bin` + `ephem_apollo.json` (optional)
+
+Same format as `ephem.bin`, hourly 1969-07-01 .. 1973-01-01, for showing the Apollo landings on their real dates.
+
+### `maps/index.json` + images
+
+Base maps for the site picker: `{id, file, proj, kind, bounds}`; `bounds` = `[x_min, y_min, x_max, y_max]` in spstere meters
+(or `bounds_deg` for the equirectangular global map, longitude 0..360 left to right). `sp_hillshade`, `shackleton_hillshade`, `global_hillshade`
+are orientation hillshades (artificial light, not a prediction). `sp_sun` / `sp_earth` are NASA PGDA average visibility, 0..255 = 0..100% of the time.
+
+### `fixture/series_check.json`
+
+Three real sites, one lunar day (708 hourly steps) each, from `prep/checks.py`: `sun_frac[708]`, `earth_el_minus_horizon[708]`,
+`horizon_el_every_10deg[36]`, `metrics` (exact definitions: `metrics()` in `prep/geom.py`), `pct_lit_mean`, `pct_lit_std`.
+The web core should reproduce `sun_frac` within 0.01 (0.05 for at most a few steps near sunrise/sunset), `metrics` hours within 1 h,
+and `pct_lit_std` within a factor of 1.5 (different random numbers).
+
+### Battery survival (optional metric)
+
+`battery()` in `prep/geom.py`. Per step: `E = min(capacity_wh, E + (panel_w * sunFrac - load_w) * step_h)`; the lander is dead at the first step where `E <= 0`.
+Defaults: `panel_w = 200`, `load_w = 100`, `capacity_wh = 1500`, start full. Outputs state of charge per step and `survival_h` (null = survives the window).
+`fixture/series_check.json` has `battery_default.{survival_h, min_soc}` per site for cross-checking.
