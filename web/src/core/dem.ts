@@ -25,7 +25,7 @@ export class Dem {
     if (t.data) return Promise.resolve();
     let p = this.pending.get(t.id);
     if (!p) {
-      p = this.load(t.file).then((b) => { t.data = new Int16Array(b); });
+      p = this.load(t.file).then((b) => { t.data = new Int16Array(b); }, (e) => { this.pending.delete(t.id); throw e; });
       this.pending.set(t.id, p);
     }
     return p;
@@ -68,7 +68,7 @@ export class Dem {
     for (const t of this.tiles) {
       const a = t.data;
       if (!a) continue;
-      let c: number, r: number, c0: number, c1: number, r0: number;
+      let c: number, r: number, c0: number, c1: number, r0: number, fc: number;
       if (t.proj === 'spstere') {
         const k = (2 * R) / (1 - pz); // x = 2R py/(1-pz), y = 2R px/(1-pz): sp_fwd without trig
         c = (k * py - t.x0!) / t.px!;
@@ -76,6 +76,7 @@ export class Dem {
         if (!(c >= 0 && c <= t.w - 1 && r >= 0 && r <= t.h - 1)) continue;
         c0 = Math.min(Math.floor(c), t.w - 2);
         c1 = c0 + 1;
+        fc = c - c0;
       } else {
         const lat = Math.asin(Math.max(-1, Math.min(1, pz))) / DEG;
         const lon = Math.atan2(py, px) / DEG;
@@ -83,9 +84,10 @@ export class Dem {
         r = Math.max(0, Math.min(t.h - 1, (t.lat0! - lat) * t.ppd!));
         c0 = Math.floor(c) % t.w;
         c1 = (c0 + 1) % t.w;
+        fc = c - Math.floor(c);
       }
       r0 = Math.min(Math.floor(r), t.h - 2);
-      const fc = c - Math.floor(c), fr = r - r0, w = t.w;
+      const fr = r - r0, w = t.w;
       const v = (a[r0 * w + c0] * (1 - fc) + a[r0 * w + c1] * fc) * (1 - fr)
               + (a[(r0 + 1) * w + c0] * (1 - fc) + a[(r0 + 1) * w + c1] * fc) * fr;
       this.sigma = t.sigma_h;

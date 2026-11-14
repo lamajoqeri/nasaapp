@@ -23,7 +23,8 @@ export function drawStrip(canvas: HTMLCanvasElement, strip: StripResult, opts: S
   const r = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   const W = Math.max(1, Math.round(r.width)), H = Math.max(1, Math.round(r.height));
-  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+  if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

@@ -58,10 +58,3 @@ export function horizonAt(hor: ArrayLike<number>, az: number): number {
   const i0 = Math.floor(i), f = i - i0, n = hor.length;
   return hor[((i0 % n) + n) % n] * (1 - f) + hor[(((i0 + 1) % n) + n) % n] * f;
 }
-
-/** Visible fraction of the Sun disk, 0..1. */
-export function sunFrac(elSun: number, hor: number, distSun: number): number {
-  let x = (elSun - hor) / (Math.asin(SUN_R / distSun) / DEG);
-  x = Math.max(-1, Math.min(1, x));
-  return 1 - (Math.acos(x) - x * Math.sqrt(1 - x * x)) / Math.PI;
-}
