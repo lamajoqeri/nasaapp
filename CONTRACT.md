@@ -1,0 +1,143 @@
+# CONTRACT
+
+Shared conventions between `prep/` (Python, offline) and `web/` (TypeScript, browser).
+Change this file only after telling the other person. Reference implementation: `prep/geom.py`.
+
+## Units and frames
+
+- Angles in degrees at every interface (radians only inside functions). Distances in meters, except ephemeris vectors in **km**.
+- Time: UTC. JS `Date` ms / unix seconds in code, ISO 8601 `Z` strings in JSON.
+- Body frame: **MOON_ME** (mean Earth / polar axis, DE440), the frame of all LOLA products. Sphere radius `R = 1737400 m`.
+- Latitude planetocentric, longitude **east-positive**, any of [-180,180] or [0,360) accepted.
+- Height `h` = meters above the R sphere.
+
+## Geometry
+
+```
+unit(lat,lon) = [cos lat cos lon, cos lat sin lon, sin lat]
+position      = (R + h) * unit(lat,lon)
+
+local basis at (lat,lon):
+  up    = unit(lat,lon)
+  east  = [-sin lon, cos lon, 0]
+  north = [-sin lat cos lon, -sin lat sin lon, cos lat]
+
+site  = (R + h_dem(lat,lon) + mast) * up
+v     = target - site
+az    = atan2(v.east, v.north)  mod 360     # clockwise from local north
+el    = atan2(v.up, sqrt(|v|^2 - (v.up)^2))
+```
+
+Never use projected grid axes as north/east. Near the pole they are rotated by the longitude.
+
+### South polar stereographic (`proj: "spstere"`)
+
+lat0 = -90, lon0 = 0, k = 1, sphere R.
+
+```
+forward:  rho = 2R tan(pi/4 + lat/2)        # lat in radians, negative
+          x = rho sin lon,  y = rho cos lon
+inverse:  rho = hypot(x,y)
+          lat = 2 atan(rho / 2R) - pi/2,  lon = atan2(x, y)
+```
+
+### Horizon
+
+`horizon(site, mast)` returns, for `NAZ = 720` azimuths (`az_i = i * 0.5`):
+`el[i]` (deg, max terrain elevation) and `dist[i]` (m, distance of the sample that set the max).
+
+Distance schedule (identical in both languages):
+
+```
+d = 10;  while d <= 300000:  emit d;  d += clamp(0.02 * d, 10, 240)
+```
+
+Sample point at distance d, azimuth az (great circle from the site):
+
+```
+p = cos(d/R) * up + sin(d/R) * (cos az * north + sin az * east)     # unit vector
+target = (R + h_dem(p)) * p
+```
+
+### Sun and Earth
+
+```
+v_body = ephem(t) * 1000 - site           # ephem = Moon centre -> body, MOON_ME, km
+az, el as above                            # the site subtraction matters for Earth (0.26 deg)
+sun_radius  = asin(695700e3 / |v_sun|)     # ~0.266 deg
+x = clamp((el_sun - horizon_el(az_sun)) / sun_radius, -1, 1)
+sunFrac = 1 - (acos(x) - x*sqrt(1 - x^2)) / pi      # visible fraction of the disk, 0..1
+earthVisible = el_earth - horizon_el(az_earth) > margin   # margin default 0 deg, Earth centre
+```
+
+`horizon_el(az)` = linear interpolation between the two nearest azimuth bins (wraps at 360).
+
+Definitions used by metrics: **dark** = `sunFrac == 0`; **sunset** = next time `sunFrac` reaches 0;
+**% lit** over a window = mean `sunFrac`; **Earthset** = next time `earthVisible` turns false.
+
+### Uncertainty (horizon space)
+
+`sigma_el[i] = atan(sigma_h / dist[i])` with `sigma_h` from the manifest tile that set the max.
+Draw N = 64 Gaussian offsets per azimuth, smooth over 5 deg of azimuth (renormalise to unit variance), add `offset * sigma_el`.
+`P(lit)(t)` = mean over draws of `sunFrac > 0`; report mean and std of every metric over draws.
+
+## Artifacts (`web/public/data/`)
+
+All binaries little-endian, row-major, no header. JSON sits next to them.
+
+### `ephem.bin` + `ephem.json`
+
+`Float32[n * 6]`: per step `[sun_x, sun_y, sun_z, earth_x, earth_y, earth_z]` km, MOON_ME, aberration `LT+S`, observer Moon centre.
+
+```json
+{"t0": "2024-01-01T00:00:00Z", "step_s": 3600, "n": 140256, "frame": "MOON_ME", "kernels": ["..."]}
+```
+
+Lookup: `i = (t - t0) / step_s`, linear interpolation of the 6 components between `floor(i)` and `floor(i)+1`.
+Valid range is `[t0, t0 + (n-1)*step_s]`; the UI clamps dates to it.
+
+### `dem/manifest.json` + `dem/*.bin`
+
+```json
+{"tiles": [
+  {"id": "shackleton_20m", "file": "shackleton_20m.bin", "proj": "spstere",
+   "w": 2000, "h": 2000, "x0": -24990, "y0": 9990, "px": 20,
+   "dtype": "int16", "scale": 0.05, "offset": 1200.0, "sigma_h": 1.0},
+  {"id": "global_8ppd", "file": "global_8ppd.bin", "proj": "eqc",
+   "w": 2880, "h": 1440, "lon0": 0.0625, "lat0": 89.9375, "ppd": 8,
+   "dtype": "int16", "scale": 0.5, "offset": 0, "sigma_h": 30}
+]}
+```
+
+- Tiles are listed **finest first**. `h_dem(point)` = bilinear sample of the first tile that contains the point; 0 if none does.
+- `height_m = offset + scale * raw`.
+- `spstere`: `(x0, y0)` = projected coords of the **centre of pixel (row 0, col 0)**; row 0 is the top (max y).
+  `col = (x - x0) / px`, `row = (y0 - y) / px`. Inside iff `0 <= col <= w-1` and `0 <= row <= h-1`.
+- `eqc`: `(lon0, lat0)` = centre of pixel (0,0), `ppd` pixels per degree.
+  `col = ((lon - lon0) mod 360) * ppd` wrapping in longitude, `row = (lat0 - lat) * ppd` clamped to `[0, h-1]`. Always "inside".
+- Tiles are fetched lazily; a site only needs the tiles its rays can touch.
+
+### `sites.json`
+
+```json
+[{"id": "apollo11", "name": "Apollo 11", "lat": 0.6741, "lon": 23.4730,
+  "program": "Apollo", "date": "1969-07-20", "note": "Mare Tranquillitatis"}]
+```
+
+### `fixture/`
+
+Synthetic test data in the same formats: `fixture/dem/manifest.json` (+ one tile with a Gaussian mountain on a flat sphere) and `fixture/fixture.json`:
+
+```json
+{"site": {"lat": -89.5, "lon": 30, "mast": 2},
+ "horizon_el": [720 numbers],            // analytic reference, tolerance 0.05 deg
+ "peak_az": 0.0,                         // spherical-trig bearing to the mountain, tolerance 0.5 deg
+ "ephem": [{"t": "...Z", "lat": 0, "lon": 0, "h": 0,
+            "sun_az": 0, "sun_el": 0, "earth_az": 0, "earth_el": 0}]}   // straight from SPICE, tolerance 0.005 deg
+```
+
+Both `prep/geom.py` and `web/src/core/` must reproduce these numbers from the artifacts.
+
+### `bench/`
+
+`bench/index.json`: `[{"id", "utc", "sun_az", "sun_el", "photo": "x.png", "model": "x_model.png", "bounds": [x_min, y_min, x_max, y_max], "scores": {"flat": {"iou", "f1"}, "dem240": {...}, "ours": {...}}}]`. Bounds in spstere meters.
