@@ -21,7 +21,7 @@ const init = () => (ready ??= (async () => {
     get('ephem.bin'),
   ]);
   return { dem, eph: new Ephem(meta, bin) };
-})());
+})().catch((e) => { ready = null; throw e; }));
 
 // ponytail: unbounded cache, fine for a session's handful of sites; LRU if people script hundreds
 const horizons = new Map<string, Promise<Horizon>>();
@@ -46,8 +46,9 @@ async function handle(req: Request): Promise<unknown> {
       return { t0: eph.t0, t1: eph.t1 };
     case 'scenario': {
       const h = await hor(req.site);
-      const t0 = eph.clamp(req.t);
-      const t1 = eph.clamp(t0 + (req.days ?? 29.5) * 86400e3);
+      // No silent clamp: a shifted or truncated window would be compared as if it were the asked-for one.
+      const t0 = req.t, t1 = t0 + (req.days ?? 29.5) * 86400e3;
+      if (t0 < eph.t0 || t1 > eph.t1) throw new Error('window is outside the 2024–2040 ephemeris');
       const s = series(eph, req.site, h, t0, t1, req.stepMs ?? 3600e3, req.earthMargin ?? 0);
       const m = metrics(s);
       const u = req.mc === false ? null : monteCarlo(s, h, req.earthMargin ?? 0);
@@ -70,6 +71,6 @@ self.onmessage = async (ev: MessageEvent<{ id: number; req: Request & { dataBase
   try {
     self.postMessage({ id, ok: true, value: await handle(req) });
   } catch (e) {
-    self.postMessage({ id, ok: false, error: String(e) });
+    self.postMessage({ id, ok: false, error: e instanceof Error ? e.message : String(e) });
   }
 };

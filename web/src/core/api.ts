@@ -26,6 +26,11 @@ worker.onmessage = (ev) => {
   ok ? w?.res(value) : w?.rej(new Error(error));
 };
 
+worker.onerror = (ev) => {
+  for (const w of waiting.values()) w.rej(new Error(ev.message || 'core worker failed to load'));
+  waiting.clear();
+};
+
 function call<T>(req: Request): Promise<T> {
   const id = next++;
   return new Promise<T>((res, rej) => {
