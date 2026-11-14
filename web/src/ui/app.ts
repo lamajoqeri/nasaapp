@@ -2,6 +2,7 @@ import { core, type ScenarioResult, type Site, type StripResult } from '../core/
 import { drawPanorama } from './panorama';
 import { drawStrip, stripSummary, stripTimeAt } from './strips';
 import { caption, DAY, delta, dur, isoMin, rows, utc } from './format';
+import type { View3D } from '../view3d/view3d';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
 /** One scenario column. `site` is a sites.json id or 'custom'. */
@@ -17,6 +18,7 @@ let sites: SiteRec[] = [];
 let range = { t0: -Infinity, t1: Infinity };
 let slip = 0, idx = 0, playing = false;
 const cols: Col[] = [];
+let view3d: View3D | null = null; // lazy: three.js loads only when the 3D section is opened
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const clampT = (t: number) => Math.min(range.t1 - 29.5 * DAY, Math.max(range.t0, t));
@@ -184,6 +186,7 @@ class Col {
     const p = b.uncertainty ? `, P(lit) ${Math.round(b.uncertainty.pLit[i] * 100)}%` : '';
     $('.now', this.el).textContent =
       `${utc(s.t[i])}: Sun ${s.sunEl[i].toFixed(1)}°, ${s.sunFrac[i] > 0 && s.sunFrac[i] < 0.005 ? '<1' : Math.round(s.sunFrac[i] * 100)}% visible${p}; Earth ${s.earthVis[i] ? 'in view' : 'hidden'}`;
+    if (this === cols[0]) view3d?.update({ ...this.site(), name: this.name(), t: s.t[i], sunFrac: s.sunFrac[i] });
   }
 }
 
@@ -279,6 +282,7 @@ export async function start(root: HTMLElement) {
     <p id="err" class="status err"></p>
     <main id="cols"></main>
     <div class="actions"><button id="add">+ Add scenario</button></div>
+    <details id="v3d"><summary>3D view: shadows over Shackleton (first scenario)</summary><div id="v3dmount"></div></details>
     <footer>
       Metrics cover the 29.5-day window from the landing date. “±” is the 1σ spread from a horizon Monte Carlo over terrain uncertainty.
       Ephemeris covers 2024–2040: historical landings (Apollo, Chang'e 3–5, Chandrayaan-3) show their site at the date you pick.
@@ -313,6 +317,17 @@ export async function start(root: HTMLElement) {
   scrub.oninput = () => { setPlaying(false); setIdx(+scrub.value); };
   $('#play').onclick = () => setPlaying(!playing);
   $('#add').onclick = () => { addCol({ ...cols[cols.length - 1].spec }); saveHash(); };
+
+  $<HTMLDetailsElement>('#v3d').ontoggle = async () => {
+    if (view3d || !$<HTMLDetailsElement>('#v3d').open) return;
+    $('#v3dmount').textContent = 'Loading 3D view…';
+    try {
+      view3d = await (await import('../view3d/view3d')).mount($('#v3dmount'));
+      cols[0]?.drawNow();
+    } catch (e) {
+      $('#v3dmount').textContent = `3D view unavailable: ${(e as Error).message}`;
+    }
+  };
 
   let raf = 0;
   addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => cols.forEach((c) => c.render())); });
