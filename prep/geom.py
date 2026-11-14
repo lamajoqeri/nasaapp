@@ -74,12 +74,13 @@ class Dem:
         return (h, sig) if with_sigma else h
 
 
-def horizon(dem, lat, lon, mast=0.0, naz=NAZ):
+def horizon(dem, lat, lon, mast=0.0, naz=NAZ, d=None, azs=None):
     """-> el_deg[naz], dist_m[naz], sigma_h_m[naz] (DEM sigma at the sample that set the max)."""
     e, n, u = enu(lat, lon)
     site = (R + float(dem.sample(lat, lon)) + mast) * u
-    d = schedule()
-    az = np.radians(np.arange(naz) * 360.0 / naz)
+    d = schedule() if d is None else d
+    az = np.radians(np.arange(naz) * 360.0 / naz if azs is None else azs)
+    naz = len(az)
     dirh = np.cos(az)[:, None] * n + np.sin(az)[:, None] * e
     p = np.cos(d / R)[None, :, None] * u + np.sin(d / R)[None, :, None] * dirh[:, None, :]
     plat, plon = np.degrees(np.arcsin(p[..., 2])), np.degrees(np.arctan2(p[..., 1], p[..., 0]))
