@@ -58,3 +58,28 @@ table.m { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-
 canvas.strip { cursor: pointer; }
 .actions { margin: 12px 0; }
 footer { color: var(--muted); font-size: 12px; margin-top: 16px; max-width: 70ch; }
+
+/* proof section: explainer, reality check, how do we know */
+header details.explain { margin: 0 0 8px; max-width: 75ch; }
+details summary { cursor: pointer; color: var(--accent); }
+details p { margin: 6px 0; }
+.proof { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 16px; align-items: start; }
+.proof h2 { font-size: 1.05rem; margin: 0 0 6px; }
+.proof h3 { font-size: .95rem; margin: 14px 0 4px; }
+.proof p { margin: 6px 0; }
+.proof .pick { display: flex; gap: 6px; align-items: center; color: var(--muted); margin: 6px 0; }
+.proof .pick select { flex: 1; min-width: 0; }
+.split { position: relative; --pos: 50%; touch-action: pan-y; user-select: none; cursor: ew-resize; border-radius: 6px; overflow: hidden; background: #07090d; min-height: 120px; }
+.split img { display: block; width: 100%; height: auto; pointer-events: none; }
+.split .model { position: absolute; inset: 0; height: 100%; clip-path: inset(0 0 0 var(--pos)); }
+.split .handle { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 32px; margin-left: -16px; touch-action: none; }
+.split .handle::before { content: ''; position: absolute; top: 0; bottom: 0; left: 15px; width: 2px; background: var(--accent); }
+.split .handle::after { content: '⟷'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--accent); color: #000; border-radius: 50%; width: 28px; height: 28px; line-height: 28px; text-align: center; font-size: 15px; }
+.split .handle:focus-visible::after { outline: 2px solid #fff; outline-offset: 2px; }
+.split .tag { position: absolute; top: 6px; font-size: 11px; background: rgba(11,13,18,.75); padding: 1px 6px; border-radius: 4px; }
+.split .tag.l { left: 6px; } .split .tag.r { right: 6px; }
+.m .ours, .m tr.ours th, .m tr.ours td { color: var(--accent); font-weight: 600; }
+table.how td { text-align: left; }
+table.how th { width: 55%; }
+canvas.scatter { max-width: 420px; margin: 8px auto 0; }
+table.how tr:first-child th { font-size: inherit; }
