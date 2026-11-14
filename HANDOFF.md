@@ -168,3 +168,15 @@ Honest wording for validation: "Validated against time-stamped LRO NAC scenes an
 - `web/public/data/validation.json` — numbers for a "How do we know?" panel: JPL Horizons max error 0.00002 deg (Sun) / 0.00012 deg (Earth) over 100 samples each; fast vs brute-force horizon march max 0.04 deg; vs NASA PGDA maps at 300 random points: Sun MAE 1.5% (r 0.96), Earth MAE 0.9% (r 0.99). `pgda.points` is ready for a scatter plot.
 - `web/public/data/dsn.bin` — Uint8 per ephem step, bits = Goldstone / Madrid / Canberra can see the Moon above 10 deg. `commsWindow = earthVisible && dsn != 0`.
 - Not done by A: calibration of the uncertainty sigma against photos (two images are too few to calibrate on). Use the manifest `sigma_h` values as-is and label the bands "terrain-model uncertainty (LOLA error map)".
+
+## Update Sat ~14:30 PST — more from Account A (schemas in CONTRACT.md, bottom sections)
+
+**One change you must mirror in the TS core:** uncertainty smoothing is now a **45 deg** boxcar (90 azimuth bins), not 5 deg, and the 20 m tiles' `sigma_h` in the manifest went from ~0.19 to ~0.29 m. Both were calibrated against NASA's own Monte-Carlo DEM realisations (`calibration.json`). If you already ported the 5 deg version, change the one constant; `sigma_h` is read from the manifest so it needs nothing.
+
+New, all optional to use:
+- `fixture/series_check.json` — three real sites, one lunar day each: `sun_frac[708]`, `earth_el_minus_horizon[708]`, `metrics`, `pct_lit_std`, `battery_default`. A fourth vitest: reproduce these from the real artifacts (tolerances in CONTRACT.md). Exact metric definitions: `metrics()` in `prep/geom.py` (hours_to_sunset/sunrise/earthset/earthrise, pct_lit, longest_dark_h, dte_hours, longest_no_earth_h, comms_hours).
+- `maps/` — base maps for the "click on the map" site picker: `sp_hillshade.png` (80S-90S), `shackleton_hillshade.png`, `global_hillshade.jpg` (equirectangular, lon 0..360), plus `sp_sun.png` / `sp_earth.png` (NASA average Sun / Earth visibility, 0..255 = 0..100%), nice as a heat overlay to guide where to click. Bounds in `maps/index.json`.
+- `ephem_apollo.bin/.json` — same format as `ephem.bin`, 1969-07-01 .. 1973-01-01, so Apollo sites can be shown on their real landing dates. Check value: Apollo 11 touchdown 1969-07-20T20:17:40Z -> Sun az 88.8, el 10.70 deg (historical value 10.8), Earth el 59.2.
+- Battery survival: `battery()` in `prep/geom.py`, spec in CONTRACT.md. Defaults 200 W panel, 100 W load, 1500 Wh.
+- `bench/` is being regenerated with 15 images instead of 2 (three different Sun directions). **File names changed**: read them from `bench/index.json` (`images[].photo`, `images[].model`), do not hard-code. `index.json` now also has `summary` (mean IoU per model per group) and each image has `group`: `known_time` (headline, 2 images) or `matched_time` (13 images whose capture time was identified by best match; disclosed in `method`).
+- `prep/checks.py` — 10 s regression run for the Python side (math, fixture, DEM edges, metrics, battery, Apollo 11).

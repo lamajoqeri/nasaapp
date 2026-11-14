@@ -1,20 +1,62 @@
 {
- "source": "LROC NAC_DTM_SHACKRDGE02 orthoimages (3.5 m), LRO/LROC, NASA/GSFC/ASU",
- "method": "photo shadow = DN < 5% full scale; model shadow = visible Sun fraction < 0.5; 21 m grid; evaluated inside the convex hull of non-zero pixels minus footprint notches on the top/left edges; remaining zeros count as shadow (assumption for the large southern shadow); scores after one rigid shift from phase correlation with our model, applied to every model",
+ "source": "LROC NAC DTM orthoimages (SHACKRDGE02 3.5 m; ESALL_CR1, ESALL_SR12 2 m), LRO/LROC, NASA/GSFC/ASU",
+ "method": "Two groups of images, all polar stereographic orthoimages from LROC NAC DTM products:\n\nA. SHACKRDGE02 (2 images, 3.5 m). Each file is named after its source image, so the capture time is known.\n   These give the headline numbers. Weakness: DN 0 means both \"no data\" and deep shadow. We evaluate inside\n   the convex hull of non-zero pixels minus the straight-edged footprint notches on the top and left edges\n   (hand rule in footprint()), and count the remaining zeros as shadow. The large dark area on the southern\n   edge is therefore assumed to be shadow.\n\nB. ESALL_CR1 (7 images) and ESALL_SR12 (6 images), 2 m. Footprints are unambiguous (shadows are dim but\n   non-zero), and the images span three dates with Sun directions ~140 and ~215 deg apart. Weakness: the\n   labels do not say which source image each orthoimage came from. Each product lists 7-8 source observations;\n   we pick, for every model separately, the candidate time that scores best on a coarse grid. Candidates from\n   different dates differ by >100 deg of Sun azimuth, so the date is identified unambiguously; candidates on\n   the same date differ by ~1-2 deg, which is where the best-of selection can flatter a score slightly.\n\nPhoto shadow = block-mean DN < 5% of full scale (De Rosa et al. 2012). Model shadow = visible Sun fraction < 0.5.\nAll images are from 22 Sep - 11 Oct 2010 (southern spring), so there is no seasonal spread.",
  "baselines": {
   "flat": "smooth sphere, no terrain",
   "slope_only": "local slope within 60 m, no cast shadows",
   "dem240": "240 m DEM only",
   "ours": "20 m DEM + 240 m far field out to 300 km"
  },
+ "summary": {
+  "known_time": {
+   "n": 2,
+   "flat": {
+    "iou": 0.0,
+    "accuracy": 0.873
+   },
+   "dem240": {
+    "iou": 0.512,
+    "accuracy": 0.936
+   },
+   "slope_only": {
+    "iou": 0.603,
+    "accuracy": 0.95
+   },
+   "ours": {
+    "iou": 0.702,
+    "accuracy": 0.962
+   }
+  },
+  "matched_time": {
+   "n": 13,
+   "flat": {
+    "iou": 0.0,
+    "accuracy": 0.402
+   },
+   "dem240": {
+    "iou": 0.894,
+    "accuracy": 0.939
+   },
+   "slope_only": {
+    "iou": 0.789,
+    "accuracy": 0.869
+   },
+   "ours": {
+    "iou": 0.96,
+    "accuracy": 0.977
+   }
+  }
+ },
  "images": [
   {
-   "id": "M139797542",
+   "id": "SHACKRDGE02_M139797542_350CM",
+   "group": "known_time",
+   "source_image": "M139797542",
    "utc": "2010-09-22T12:24:53Z",
    "sun_az": 144.11,
    "sun_el": 1.169,
-   "photo": "M139797542_photo.png",
-   "model": "M139797542_model.png",
+   "photo": "SHACKRDGE02_M139797542_350CM_photo.png",
+   "model": "SHACKRDGE02_M139797542_350CM_model.png",
    "bounds": [
     -13718.25,
     -13228.25,
@@ -72,12 +114,14 @@
    }
   },
   {
-   "id": "M139811097",
+   "id": "SHACKRDGE02_M139811097_350CM",
+   "group": "known_time",
+   "source_image": "M139811097",
    "utc": "2010-09-22T16:10:48Z",
    "sun_az": 142.2,
    "sun_el": 1.18,
-   "photo": "M139811097_photo.png",
-   "model": "M139811097_model.png",
+   "photo": "SHACKRDGE02_M139811097_350CM_photo.png",
+   "model": "SHACKRDGE02_M139811097_350CM_model.png",
    "bounds": [
     -13718.25,
     -13228.25,
@@ -131,6 +175,1066 @@
      "iou": 0.0,
      "f1": 0.0,
      "accuracy": 0.874
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT01_2M",
+   "group": "matched_time",
+   "source_image": "M139811097",
+   "utc": "2010-09-22T16:10:48Z",
+   "sun_az": 144.93,
+   "sun_el": 1.135,
+   "photo": "ESALL_CR1_NACORT01_2M_photo.png",
+   "model": "ESALL_CR1_NACORT01_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.298,
+   "registration_shift_m": [
+    0.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.958,
+     "f1": 0.978,
+     "accuracy": 0.987
+    },
+    "dem240": {
+     "iou": 0.908,
+     "f1": 0.952,
+     "accuracy": 0.972
+    },
+    "slope_only": {
+     "iou": 0.839,
+     "f1": 0.912,
+     "accuracy": 0.952
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.702
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.958,
+     "f1": 0.978,
+     "accuracy": 0.987
+    },
+    "dem240": {
+     "iou": 0.908,
+     "f1": 0.952,
+     "accuracy": 0.972
+    },
+    "slope_only": {
+     "iou": 0.839,
+     "f1": 0.912,
+     "accuracy": 0.952
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.702
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M139811097",
+     "dem240": "M139797542",
+     "slope_only": "M139797542"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.961,
+     "M139811097": 0.962,
+     "M139817894": 0.96,
+     "M140869717": 0.046,
+     "M140876512": 0.044,
+     "M141412504": 0.196,
+     "M141432879": 0.209,
+     "M141439653": 0.212
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT02_2M",
+   "group": "matched_time",
+   "source_image": "M139811097",
+   "utc": "2010-09-22T16:10:48Z",
+   "sun_az": 144.93,
+   "sun_el": 1.135,
+   "photo": "ESALL_CR1_NACORT02_2M_photo.png",
+   "model": "ESALL_CR1_NACORT02_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.623,
+   "registration_shift_m": [
+    0.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.985,
+     "f1": 0.992,
+     "accuracy": 0.99
+    },
+    "dem240": {
+     "iou": 0.935,
+     "f1": 0.966,
+     "accuracy": 0.959
+    },
+    "slope_only": {
+     "iou": 0.845,
+     "f1": 0.916,
+     "accuracy": 0.903
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.377
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.985,
+     "f1": 0.992,
+     "accuracy": 0.99
+    },
+    "dem240": {
+     "iou": 0.935,
+     "f1": 0.966,
+     "accuracy": 0.959
+    },
+    "slope_only": {
+     "iou": 0.845,
+     "f1": 0.916,
+     "accuracy": 0.903
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.377
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M139811097",
+     "dem240": "M139797542",
+     "slope_only": "M139817894"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.98,
+     "M139811097": 0.982,
+     "M139817894": 0.982,
+     "M140869717": 0.268,
+     "M140876512": 0.256,
+     "M141412504": 0.04,
+     "M141432879": 0.04,
+     "M141439653": 0.04
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT03_2M",
+   "group": "matched_time",
+   "source_image": "M139817894",
+   "utc": "2010-09-22T18:04:04Z",
+   "sun_az": 143.97,
+   "sun_el": 1.141,
+   "photo": "ESALL_CR1_NACORT03_2M_photo.png",
+   "model": "ESALL_CR1_NACORT03_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.461,
+   "registration_shift_m": [
+    0.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.972,
+     "f1": 0.986,
+     "accuracy": 0.987
+    },
+    "dem240": {
+     "iou": 0.923,
+     "f1": 0.96,
+     "accuracy": 0.964
+    },
+    "slope_only": {
+     "iou": 0.821,
+     "f1": 0.902,
+     "accuracy": 0.917
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.539
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.972,
+     "f1": 0.986,
+     "accuracy": 0.987
+    },
+    "dem240": {
+     "iou": 0.923,
+     "f1": 0.96,
+     "accuracy": 0.964
+    },
+    "slope_only": {
+     "iou": 0.821,
+     "f1": 0.902,
+     "accuracy": 0.917
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.539
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M139817894",
+     "dem240": "M139797542",
+     "slope_only": "M139811097"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.974,
+     "M139811097": 0.977,
+     "M139817894": 0.978,
+     "M140869717": 0.139,
+     "M140876512": 0.134,
+     "M141412504": 0.157,
+     "M141432879": 0.166,
+     "M141439653": 0.168
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT04_2M",
+   "group": "matched_time",
+   "source_image": "M140876512",
+   "utc": "2010-10-05T00:07:41Z",
+   "sun_az": 354.66,
+   "sun_el": 2.031,
+   "photo": "ESALL_CR1_NACORT04_2M_photo.png",
+   "model": "ESALL_CR1_NACORT04_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.648,
+   "registration_shift_m": [
+    5.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.925,
+     "f1": 0.961,
+     "accuracy": 0.951
+    },
+    "dem240": {
+     "iou": 0.8,
+     "f1": 0.889,
+     "accuracy": 0.869
+    },
+    "slope_only": {
+     "iou": 0.852,
+     "f1": 0.92,
+     "accuracy": 0.904
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.352
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.925,
+     "f1": 0.961,
+     "accuracy": 0.951
+    },
+    "dem240": {
+     "iou": 0.8,
+     "f1": 0.889,
+     "accuracy": 0.869
+    },
+    "slope_only": {
+     "iou": 0.852,
+     "f1": 0.92,
+     "accuracy": 0.904
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.352
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M140876512",
+     "dem240": "M140876512",
+     "slope_only": "M140876512"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.047,
+     "M139811097": 0.049,
+     "M139817894": 0.049,
+     "M140869717": 0.905,
+     "M140876512": 0.92,
+     "M141412504": 0.677,
+     "M141432879": 0.668,
+     "M141439653": 0.666
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT05_2M",
+   "group": "matched_time",
+   "source_image": "M140876512",
+   "utc": "2010-10-05T00:07:41Z",
+   "sun_az": 354.66,
+   "sun_el": 2.031,
+   "photo": "ESALL_CR1_NACORT05_2M_photo.png",
+   "model": "ESALL_CR1_NACORT05_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.583,
+   "registration_shift_m": [
+    5.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.903,
+     "f1": 0.949,
+     "accuracy": 0.942
+    },
+    "dem240": {
+     "iou": 0.741,
+     "f1": 0.851,
+     "accuracy": 0.844
+    },
+    "slope_only": {
+     "iou": 0.793,
+     "f1": 0.885,
+     "accuracy": 0.877
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.417
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.903,
+     "f1": 0.949,
+     "accuracy": 0.942
+    },
+    "dem240": {
+     "iou": 0.741,
+     "f1": 0.851,
+     "accuracy": 0.844
+    },
+    "slope_only": {
+     "iou": 0.793,
+     "f1": 0.885,
+     "accuracy": 0.877
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.417
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M140876512",
+     "dem240": "M140869717",
+     "slope_only": "M140869717"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.266,
+     "M139811097": 0.267,
+     "M139817894": 0.268,
+     "M140869717": 0.89,
+     "M140876512": 0.9,
+     "M141412504": 0.441,
+     "M141432879": 0.438,
+     "M141439653": 0.437
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT06_2M",
+   "group": "matched_time",
+   "source_image": "M141412504",
+   "utc": "2010-10-11T05:00:57Z",
+   "sun_az": 278.85,
+   "sun_el": 1.568,
+   "photo": "ESALL_CR1_NACORT06_2M_photo.png",
+   "model": "ESALL_CR1_NACORT06_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.49,
+   "registration_shift_m": [
+    5.0,
+    5.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.938,
+     "f1": 0.968,
+     "accuracy": 0.969
+    },
+    "dem240": {
+     "iou": 0.862,
+     "f1": 0.926,
+     "accuracy": 0.932
+    },
+    "slope_only": {
+     "iou": 0.837,
+     "f1": 0.911,
+     "accuracy": 0.92
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.51
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.938,
+     "f1": 0.968,
+     "accuracy": 0.969
+    },
+    "dem240": {
+     "iou": 0.862,
+     "f1": 0.926,
+     "accuracy": 0.932
+    },
+    "slope_only": {
+     "iou": 0.837,
+     "f1": 0.911,
+     "accuracy": 0.92
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.51
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M141412504",
+     "dem240": "M141432879",
+     "slope_only": "M141439653"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.175,
+     "M139811097": 0.173,
+     "M139817894": 0.172,
+     "M140869717": 0.29,
+     "M140876512": 0.312,
+     "M141412504": 0.947,
+     "M141432879": 0.946,
+     "M141439653": 0.945
+    }
+   }
+  },
+  {
+   "id": "ESALL_CR1_NACORT07_2M",
+   "group": "matched_time",
+   "source_image": "M141412504",
+   "utc": "2010-10-11T05:00:57Z",
+   "sun_az": 278.85,
+   "sun_el": 1.568,
+   "photo": "ESALL_CR1_NACORT07_2M_photo.png",
+   "model": "ESALL_CR1_NACORT07_2M_model.png",
+   "bounds": [
+    -13381.0,
+    -14539.0,
+    -8381.0,
+    -9539.0
+   ],
+   "shadow_fraction_photo": 0.636,
+   "registration_shift_m": [
+    5.0,
+    5.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.979,
+     "f1": 0.989,
+     "accuracy": 0.987
+    },
+    "dem240": {
+     "iou": 0.927,
+     "f1": 0.962,
+     "accuracy": 0.953
+    },
+    "slope_only": {
+     "iou": 0.971,
+     "f1": 0.985,
+     "accuracy": 0.981
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.364
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.979,
+     "f1": 0.989,
+     "accuracy": 0.987
+    },
+    "dem240": {
+     "iou": 0.927,
+     "f1": 0.962,
+     "accuracy": 0.953
+    },
+    "slope_only": {
+     "iou": 0.971,
+     "f1": 0.985,
+     "accuracy": 0.981
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.364
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M141412504",
+     "dem240": "M141412504",
+     "slope_only": "M141412504"
+    },
+    "coarse_iou_ours": {
+     "M139797542": 0.027,
+     "M139811097": 0.027,
+     "M139817894": 0.027,
+     "M140869717": 0.755,
+     "M140876512": 0.764,
+     "M141412504": 0.98,
+     "M141432879": 0.98,
+     "M141439653": 0.979
+    }
+   }
+  },
+  {
+   "id": "ESALL_SR12_NACORT01_2M",
+   "group": "matched_time",
+   "source_image": "M139872173",
+   "utc": "2010-09-23T09:08:43Z",
+   "sun_az": 158.73,
+   "sun_el": 1.335,
+   "photo": "ESALL_SR12_NACORT01_2M_photo.png",
+   "model": "ESALL_SR12_NACORT01_2M_model.png",
+   "bounds": [
+    -5141.0,
+    -9859.0,
+    -141.0,
+    -4859.0
+   ],
+   "shadow_fraction_photo": 0.466,
+   "registration_shift_m": [
+    -5.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.941,
+     "f1": 0.969,
+     "accuracy": 0.972
+    },
+    "dem240": {
+     "iou": 0.834,
+     "f1": 0.909,
+     "accuracy": 0.921
+    },
+    "slope_only": {
+     "iou": 0.647,
+     "f1": 0.785,
+     "accuracy": 0.834
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.534
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.941,
+     "f1": 0.969,
+     "accuracy": 0.972
+    },
+    "dem240": {
+     "iou": 0.834,
+     "f1": 0.909,
+     "accuracy": 0.921
+    },
+    "slope_only": {
+     "iou": 0.647,
+     "f1": 0.785,
+     "accuracy": 0.834
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.534
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M139872173",
+     "dem240": "M139872173",
+     "slope_only": "M139872173"
+    },
+    "coarse_iou_ours": {
+     "M139872173": 0.927,
+     "M139878946": 0.915,
+     "M140890072": 0.314,
+     "M140903652": 0.304,
+     "M140917211": 0.291,
+     "M141378588": 0.404,
+     "M141385360": 0.405
+    }
+   }
+  },
+  {
+   "id": "ESALL_SR12_NACORT02_2M",
+   "group": "matched_time",
+   "source_image": "M139872173",
+   "utc": "2010-09-23T09:08:43Z",
+   "sun_az": 158.73,
+   "sun_el": 1.335,
+   "photo": "ESALL_SR12_NACORT02_2M_photo.png",
+   "model": "ESALL_SR12_NACORT02_2M_model.png",
+   "bounds": [
+    -5141.0,
+    -9859.0,
+    -141.0,
+    -4859.0
+   ],
+   "shadow_fraction_photo": 0.91,
+   "registration_shift_m": [
+    0.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.983,
+     "f1": 0.992,
+     "accuracy": 0.985
+    },
+    "dem240": {
+     "iou": 0.967,
+     "f1": 0.983,
+     "accuracy": 0.97
+    },
+    "slope_only": {
+     "iou": 0.869,
+     "f1": 0.93,
+     "accuracy": 0.874
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.09
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.983,
+     "f1": 0.992,
+     "accuracy": 0.985
+    },
+    "dem240": {
+     "iou": 0.967,
+     "f1": 0.983,
+     "accuracy": 0.97
+    },
+    "slope_only": {
+     "iou": 0.869,
+     "f1": 0.93,
+     "accuracy": 0.874
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.09
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M139872173",
+     "dem240": "M139872173",
+     "slope_only": "M140890072"
+    },
+    "coarse_iou_ours": {
+     "M139872173": 0.975,
+     "M139878946": 0.962,
+     "M140890072": 0.875,
+     "M140903652": 0.872,
+     "M140917211": 0.87,
+     "M141378588": 0.231,
+     "M141385360": 0.219
+    }
+   }
+  },
+  {
+   "id": "ESALL_SR12_NACORT03_2M",
+   "group": "matched_time",
+   "source_image": "M140917211",
+   "utc": "2010-10-05T11:25:59Z",
+   "sun_az": 11.32,
+   "sun_el": 1.749,
+   "photo": "ESALL_SR12_NACORT03_2M_photo.png",
+   "model": "ESALL_SR12_NACORT03_2M_model.png",
+   "bounds": [
+    -5141.0,
+    -9859.0,
+    -141.0,
+    -4859.0
+   ],
+   "shadow_fraction_photo": 0.639,
+   "registration_shift_m": [
+    5.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.953,
+     "f1": 0.976,
+     "accuracy": 0.969
+    },
+    "dem240": {
+     "iou": 0.879,
+     "f1": 0.935,
+     "accuracy": 0.921
+    },
+    "slope_only": {
+     "iou": 0.512,
+     "f1": 0.678,
+     "accuracy": 0.521
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.361
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.953,
+     "f1": 0.976,
+     "accuracy": 0.969
+    },
+    "dem240": {
+     "iou": 0.879,
+     "f1": 0.935,
+     "accuracy": 0.921
+    },
+    "slope_only": {
+     "iou": 0.512,
+     "f1": 0.678,
+     "accuracy": 0.521
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.361
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M140917211",
+     "dem240": "M140903652",
+     "slope_only": "M141378588"
+    },
+    "coarse_iou_ours": {
+     "M139872173": 0.379,
+     "M139878946": 0.369,
+     "M140890072": 0.919,
+     "M140903652": 0.945,
+     "M140917211": 0.95,
+     "M141378588": 0.515,
+     "M141385360": 0.515
+    }
+   }
+  },
+  {
+   "id": "ESALL_SR12_NACORT04_2M",
+   "group": "matched_time",
+   "source_image": "M140890072",
+   "utc": "2010-10-05T03:53:41Z",
+   "sun_az": 15.16,
+   "sun_el": 1.746,
+   "photo": "ESALL_SR12_NACORT04_2M_photo.png",
+   "model": "ESALL_SR12_NACORT04_2M_model.png",
+   "bounds": [
+    -5141.0,
+    -9859.0,
+    -141.0,
+    -4859.0
+   ],
+   "shadow_fraction_photo": 0.844,
+   "registration_shift_m": [
+    5.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.992,
+     "f1": 0.996,
+     "accuracy": 0.993
+    },
+    "dem240": {
+     "iou": 0.955,
+     "f1": 0.977,
+     "accuracy": 0.962
+    },
+    "slope_only": {
+     "iou": 0.98,
+     "f1": 0.99,
+     "accuracy": 0.983
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.156
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.992,
+     "f1": 0.996,
+     "accuracy": 0.993
+    },
+    "dem240": {
+     "iou": 0.955,
+     "f1": 0.977,
+     "accuracy": 0.962
+    },
+    "slope_only": {
+     "iou": 0.98,
+     "f1": 0.99,
+     "accuracy": 0.983
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.156
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M140890072",
+     "dem240": "M140890072",
+     "slope_only": "M140890072"
+    },
+    "coarse_iou_ours": {
+     "M139872173": 0.861,
+     "M139878946": 0.879,
+     "M140890072": 0.992,
+     "M140903652": 0.991,
+     "M140917211": 0.991,
+     "M141378588": 0.218,
+     "M141385360": 0.207
+    }
+   }
+  },
+  {
+   "id": "ESALL_SR12_NACORT05_2M",
+   "group": "matched_time",
+   "source_image": "M141385360",
+   "utc": "2010-10-10T21:28:34Z",
+   "sun_az": 305.1,
+   "sun_el": 1.634,
+   "photo": "ESALL_SR12_NACORT05_2M_photo.png",
+   "model": "ESALL_SR12_NACORT05_2M_model.png",
+   "bounds": [
+    -5141.0,
+    -9859.0,
+    -141.0,
+    -4859.0
+   ],
+   "shadow_fraction_photo": 0.679,
+   "registration_shift_m": [
+    5.0,
+    5.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.985,
+     "f1": 0.992,
+     "accuracy": 0.99
+    },
+    "dem240": {
+     "iou": 0.943,
+     "f1": 0.971,
+     "accuracy": 0.961
+    },
+    "slope_only": {
+     "iou": 0.894,
+     "f1": 0.944,
+     "accuracy": 0.928
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.321
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.985,
+     "f1": 0.992,
+     "accuracy": 0.99
+    },
+    "dem240": {
+     "iou": 0.943,
+     "f1": 0.971,
+     "accuracy": 0.961
+    },
+    "slope_only": {
+     "iou": 0.894,
+     "f1": 0.944,
+     "accuracy": 0.928
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.321
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M141385360",
+     "dem240": "M141385360",
+     "slope_only": "M141378588"
+    },
+    "coarse_iou_ours": {
+     "M139872173": 0.39,
+     "M139878946": 0.364,
+     "M140890072": 0.455,
+     "M140903652": 0.448,
+     "M140917211": 0.44,
+     "M141378588": 0.979,
+     "M141385360": 0.983
+    }
+   }
+  },
+  {
+   "id": "ESALL_SR12_NACORT06_2M",
+   "group": "matched_time",
+   "source_image": "M141385360",
+   "utc": "2010-10-10T21:28:34Z",
+   "sun_az": 305.1,
+   "sun_el": 1.634,
+   "photo": "ESALL_SR12_NACORT06_2M_photo.png",
+   "model": "ESALL_SR12_NACORT06_2M_model.png",
+   "bounds": [
+    -5141.0,
+    -9859.0,
+    -141.0,
+    -4859.0
+   ],
+   "shadow_fraction_photo": 0.492,
+   "registration_shift_m": [
+    5.0,
+    5.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.964,
+     "f1": 0.982,
+     "accuracy": 0.982
+    },
+    "dem240": {
+     "iou": 0.954,
+     "f1": 0.977,
+     "accuracy": 0.977
+    },
+    "slope_only": {
+     "iou": 0.397,
+     "f1": 0.569,
+     "accuracy": 0.704
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.508
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.964,
+     "f1": 0.982,
+     "accuracy": 0.982
+    },
+    "dem240": {
+     "iou": 0.954,
+     "f1": 0.977,
+     "accuracy": 0.977
+    },
+    "slope_only": {
+     "iou": 0.397,
+     "f1": 0.569,
+     "accuracy": 0.704
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.508
+    }
+   },
+   "time_matching": {
+    "picked": {
+     "ours": "M141385360",
+     "dem240": "M141385360",
+     "slope_only": "M141378588"
+    },
+    "coarse_iou_ours": {
+     "M139872173": 0.303,
+     "M139878946": 0.301,
+     "M140890072": 0.364,
+     "M140903652": 0.369,
+     "M140917211": 0.377,
+     "M141378588": 0.944,
+     "M141385360": 0.964
     }
    }
   }
