@@ -40,8 +40,8 @@ function call<T>(req: Request): Promise<T> {
 }
 
 export const core = {
-  /** Valid ephemeris range in ms. Clamp every date picker to it. */
-  range: () => call<{ t0: number; t1: number }>({ type: 'range' }),
+  /** Valid ephemeris ranges in ms (time order; a window must fit inside one). t0/t1 = the 2024–2040 table. */
+  range: () => call<{ t0: number; t1: number; ranges: { t0: number; t1: number }[] }>({ type: 'range' }),
   scenario: (site: Site, t: number, opts: { days?: number; stepMs?: number; mc?: boolean; earthMargin?: number } = {}) =>
     call<ScenarioResult>({ type: 'scenario', site, t, ...opts }),
   strip: (site: Site, t0: number, t1: number, opts: { stepMs?: number; earthMargin?: number } = {}) =>

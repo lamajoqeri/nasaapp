@@ -28,3 +28,9 @@ export class Ephem {
     return out;
   }
 }
+
+/** The table covering t, else the one nearest to it. */
+export function pickEphem(tables: Ephem[], t: number): Ephem {
+  const d = (e: Ephem) => Math.max(e.t0 - t, t - e.t1, 0);
+  return tables.reduce((a, b) => (d(b) < d(a) ? b : a));
+}
