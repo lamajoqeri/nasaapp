@@ -13,9 +13,9 @@ export interface Series {
   earthVis: Uint8Array;
 }
 
-/** Sun/Earth geometry vs the terrain horizon from t0 to t1 (ms, inclusive) every stepMs. */
+/** Sun/Earth geometry vs the terrain horizon from t0 to t1 (ms, t1 exclusive) every stepMs. */
 export function series(eph: Ephem, site: Site, hor: Horizon, t0: number, t1: number, stepMs: number, earthMargin = 0): Series {
-  const n = Math.max(1, Math.floor((t1 - t0) / stepMs) + 1);
+  const n = Math.max(1, Math.floor((t1 - t0) / stepMs)); // [t0, t1): 29.5 d hourly = 708 steps, as prep/geom.py
   const s: Series = {
     t: new Float64Array(n), stepMs,
     sunAz: new Float32Array(n), sunEl: new Float32Array(n), sunFrac: new Float32Array(n), sunRadius: new Float32Array(n),
@@ -62,6 +62,7 @@ export interface Metrics {
   pctLit: number;                 // mean sunFrac over the window, 0..100
   pctAnyLit: number;              // % of time any part of the disk is visible
   longestDarkHours: number;
+  longestNoEarthHours: number;
   dteHours: number;               // hours with Earth above the horizon
   pctEarth: number;
 }
@@ -70,13 +71,13 @@ export interface Metrics {
 export function metrics(s: Series, sunFracOverride?: ArrayLike<number>, earthVisOverride?: ArrayLike<number>): Metrics {
   const sf = sunFracOverride ?? s.sunFrac, ev = earthVisOverride ?? s.earthVis;
   const n = s.t.length, h = s.stepMs / 3600e3;
-  let sum = 0, any = 0, run = 0, longest = 0, earth = 0;
+  let sum = 0, any = 0, run = 0, longest = 0, earth = 0, erun = 0, elongest = 0;
   let sunset: number | null = null, sunrise: number | null = null, earthset: number | null = null, earthrise: number | null = null;
   const darkNow = sf[0] === 0, hiddenNow = !ev[0];
   for (let i = 0; i < n; i++) {
     sum += sf[i];
     if (sf[i] > 0) { any++; run = 0; } else { run++; longest = Math.max(longest, run); }
-    if (ev[i]) earth++;
+    if (ev[i]) { earth++; erun = 0; } else { erun++; elongest = Math.max(elongest, erun); }
     if (sunset === null && !darkNow && sf[i] === 0) sunset = i * h;
     if (sunrise === null && darkNow && sf[i] > 0) sunrise = i * h;
     if (earthset === null && !hiddenNow && !ev[i]) earthset = i * h;
@@ -87,6 +88,6 @@ export function metrics(s: Series, sunFracOverride?: ArrayLike<number>, earthVis
     hoursToSunset: darkNow ? 0 : sunset, hoursToSunrise: darkNow ? sunrise : 0,
     hoursToEarthset: hiddenNow ? 0 : earthset, hoursToEarthrise: hiddenNow ? earthrise : 0,
     pctLit: (100 * sum) / n, pctAnyLit: (100 * any) / n,
-    longestDarkHours: longest * h, dteHours: earth * h, pctEarth: (100 * earth) / n,
+    longestDarkHours: longest * h, longestNoEarthHours: elongest * h, dteHours: earth * h, pctEarth: (100 * earth) / n,
   };
 }
