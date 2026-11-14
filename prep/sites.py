@@ -24,7 +24,7 @@ with rasterio.open(ROOT / "data/AVGVISIB_85S_060M_201608.TIF") as s, \
         bx, by = rasterio.windows.transform(win, s.transform) * (c + 0.5, r + 0.5)
         lat, lon = sp_inv(bx, by)
         site["lat"], site["lon"] = round(float(lat), 4), round(float(lon), 3)
-        site["note"] = site["note"].split(" Representative point")[0].rstrip() + \
+        site["note"] = site["note"].split("Representative point")[0].rstrip() + \
             f" Best-lit point within 3 km (PGDA average: Sun {sun[r, c]:.0%}, Earth {earth[r, c]:.0%})."
         print(site["name"], site["lat"], site["lon"], site["note"])
 (DATA / "sites.json").write_text(json.dumps(sites, indent=1))
