@@ -6,8 +6,9 @@ Capture times are from each source image's LROC record, not the DTM label.
 
 Caveats (also written to index.json):
 - The orthoimage uses DN 0 for both "no data" and deep shadow. We evaluate inside the convex hull of
-  non-zero pixels and treat zeros inside it as shadow. The large dark area along the southern edge is
-  therefore assumed to be shadow, which is consistent with the shadow line of the ridge but unproven.
+  non-zero pixels, minus the straight-edged footprint notches on the top and left edges (hand rule in
+  footprint()), and treat remaining zeros as shadow. The large dark area along the southern edge is
+  therefore assumed to be shadow: consistent with the ridge's shadow line, but an assumption.
 - Photo shadow = block-mean DN < 5% of full scale (De Rosa et al. 2012 rule). Model shadow = visible Sun fraction < 0.5.
 - Both images are from 22 Sep 2010, 3.8 h apart: one season, one Sun direction (2 deg apart).
 """
@@ -33,6 +34,21 @@ K = 6  # 3.5 m -> 21 m model grid
 def block(a, k):
     r, c = a.shape[0] // k * k, a.shape[1] // k * k
     return a[:r, :c].reshape(r // k, k, c // k, k).mean((1, 3))
+
+
+def footprint(raw):
+    """Evaluation region on the model grid. DN 0 means both 'no data' and deep shadow, so: start from the
+    convex hull of non-zero pixels, then drop zero-valued areas wider than ~150 m that sit on the top or
+    left edge (the stereo-pair footprint has notches there; they are straight-edged, not shadows).
+    What remains of the zeros (small crater shadows, the big shadow along the south edge) counts as shadow."""
+    hull = block(convex_hull_image(raw > 0).astype(float), K) > 0.99
+    valid = block((raw > 0).astype(float), K) > 0.5
+    gaps, n = ndimage.label(hull & ~ndimage.binary_closing(valid, iterations=7, border_value=1))
+    ny, nx = hull.shape
+    for i, (r, c) in enumerate(ndimage.center_of_mass(gaps > 0, gaps, range(1, n + 1)), 1):
+        if r < 0.5 * ny or c < 0.12 * nx:
+            hull[gaps == i] = False
+    return hull
 
 
 def sun_fraction(dem, P, s, sun_r, d):
@@ -67,7 +83,7 @@ if __name__ == "__main__":
     for iid, utc in IMAGES.items():
         with rasterio.open(ROOT / f"data/nac/NAC_DTM_SHACKRDGE02_{iid}_350CM.TIF") as src:
             raw, b, px = src.read(1), src.bounds, src.res[0]
-        region = block(convex_hull_image(raw > 0).astype(float), K) > 0.99
+        region = footprint(raw)
         photo = block(raw.astype(float), K)
         truth = photo < 0.05 * 255
         ny, nx = photo.shape
@@ -111,13 +127,13 @@ if __name__ == "__main__":
         Image.fromarray(np.where(block(convex_hull_image(raw > 0).astype(float), 3) > 0.5, block(raw.astype(float), 3), 0)
                         .astype(np.uint8)).save(OUT / f"{iid}_photo.png")
         img = frac["ours"] * cos_i
-        img = np.clip(img / np.percentile(img[region], 99) * np.percentile(photo[region], 99), 0, 255) * region
+        img = np.clip(img / np.percentile(img[region], 99) * np.percentile(photo[region], 99), 0, 255) * (block(convex_hull_image(raw > 0).astype(float), K) > 0.5)
         Image.fromarray(img.astype(np.uint8)).resize((raw.shape[1] // 3, raw.shape[0] // 3), Image.BILINEAR).save(OUT / f"{iid}_model.png")
 
     (OUT / "index.json").write_text(json.dumps({
         "source": "LROC NAC_DTM_SHACKRDGE02 orthoimages (3.5 m), LRO/LROC, NASA/GSFC/ASU",
         "method": "photo shadow = DN < 5% full scale; model shadow = visible Sun fraction < 0.5; 21 m grid; "
-                  "evaluated inside convex hull of non-zero pixels (zeros inside are counted as shadow); "
+                  "evaluated inside the convex hull of non-zero pixels minus footprint notches on the top/left edges; remaining zeros count as shadow (assumption for the large southern shadow); "
                   "scores after one rigid shift from phase correlation with our model, applied to every model",
         "baselines": {"flat": "smooth sphere, no terrain", "slope_only": "local slope within 60 m, no cast shadows",
                       "dem240": "240 m DEM only", "ours": "20 m DEM + 240 m far field out to 300 km"},

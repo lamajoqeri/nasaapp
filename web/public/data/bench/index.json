@@ -1,0 +1,138 @@
+{
+ "source": "LROC NAC_DTM_SHACKRDGE02 orthoimages (3.5 m), LRO/LROC, NASA/GSFC/ASU",
+ "method": "photo shadow = DN < 5% full scale; model shadow = visible Sun fraction < 0.5; 21 m grid; evaluated inside the convex hull of non-zero pixels minus footprint notches on the top/left edges; remaining zeros count as shadow (assumption for the large southern shadow); scores after one rigid shift from phase correlation with our model, applied to every model",
+ "baselines": {
+  "flat": "smooth sphere, no terrain",
+  "slope_only": "local slope within 60 m, no cast shadows",
+  "dem240": "240 m DEM only",
+  "ours": "20 m DEM + 240 m far field out to 300 km"
+ },
+ "images": [
+  {
+   "id": "M139797542",
+   "utc": "2010-09-22T12:24:53Z",
+   "sun_az": 144.11,
+   "sun_el": 1.169,
+   "photo": "M139797542_photo.png",
+   "model": "M139797542_model.png",
+   "bounds": [
+    -13718.25,
+    -13228.25,
+    -7579.25,
+    -8209.25
+   ],
+   "shadow_fraction_photo": 0.128,
+   "registration_shift_m": [
+    0.0,
+    0.0
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.699,
+     "f1": 0.823,
+     "accuracy": 0.961
+    },
+    "dem240": {
+     "iou": 0.507,
+     "f1": 0.673,
+     "accuracy": 0.935
+    },
+    "slope_only": {
+     "iou": 0.601,
+     "f1": 0.751,
+     "accuracy": 0.949
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.872
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.699,
+     "f1": 0.823,
+     "accuracy": 0.961
+    },
+    "dem240": {
+     "iou": 0.507,
+     "f1": 0.673,
+     "accuracy": 0.935
+    },
+    "slope_only": {
+     "iou": 0.601,
+     "f1": 0.751,
+     "accuracy": 0.949
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.872
+    }
+   }
+  },
+  {
+   "id": "M139811097",
+   "utc": "2010-09-22T16:10:48Z",
+   "sun_az": 142.2,
+   "sun_el": 1.18,
+   "photo": "M139811097_photo.png",
+   "model": "M139811097_model.png",
+   "bounds": [
+    -13718.25,
+    -13228.25,
+    -7579.25,
+    -8209.25
+   ],
+   "shadow_fraction_photo": 0.126,
+   "registration_shift_m": [
+    0.0,
+    -5.2
+   ],
+   "scores": {
+    "ours": {
+     "iou": 0.704,
+     "f1": 0.826,
+     "accuracy": 0.963
+    },
+    "dem240": {
+     "iou": 0.518,
+     "f1": 0.682,
+     "accuracy": 0.937
+    },
+    "slope_only": {
+     "iou": 0.604,
+     "f1": 0.753,
+     "accuracy": 0.95
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.874
+    }
+   },
+   "scores_unregistered": {
+    "ours": {
+     "iou": 0.704,
+     "f1": 0.826,
+     "accuracy": 0.963
+    },
+    "dem240": {
+     "iou": 0.518,
+     "f1": 0.682,
+     "accuracy": 0.937
+    },
+    "slope_only": {
+     "iou": 0.604,
+     "f1": 0.753,
+     "accuracy": 0.95
+    },
+    "flat": {
+     "iou": 0.0,
+     "f1": 0.0,
+     "accuracy": 0.874
+    }
+   }
+  }
+ ]
+}

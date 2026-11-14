@@ -152,3 +152,19 @@ Read HANDOFF.md (especially "3D view must use the same geometry") and CONTRACT.m
 6. Close: open, static, runs on a phone, any coordinate on the Moon.
 
 Honest wording for validation: "Validated against time-stamped LRO NAC scenes and NASA PGDA illumination maps, with error bars on every number." Never say "first".
+
+## Update Sat 13:10 PST — new artifacts from Account A (all on `main`, schemas in CONTRACT.md)
+
+- `web/public/data/bench/` — reality check is ready to display. `index.json` + two photo/model PNG pairs (584x478, same extent) of the Connecting Ridge on 2010-09-22, real LRO NAC orthoimage vs our predicted render. Shadow IoU per model:
+
+  | Model | IoU | F1 | Pixel accuracy |
+  |---|---|---|---|
+  | Flat sphere (no terrain) | 0.00 | 0.00 | 87% |
+  | 240 m DEM only | 0.51 | 0.68 | 94% |
+  | Local slope only, no cast shadows | 0.60 | 0.75 | 95% |
+  | **Ours: 20 m + far field to 300 km** | **0.70** | **0.82** | **96%** |
+
+  Show the caveats from `index.json` `method` next to the numbers: only two images, same day, and the big southern shadow is assumed shadow (DN 0 is also the no-data value).
+- `web/public/data/validation.json` — numbers for a "How do we know?" panel: JPL Horizons max error 0.00002 deg (Sun) / 0.00012 deg (Earth) over 100 samples each; fast vs brute-force horizon march max 0.04 deg; vs NASA PGDA maps at 300 random points: Sun MAE 1.5% (r 0.96), Earth MAE 0.9% (r 0.99). `pgda.points` is ready for a scatter plot.
+- `web/public/data/dsn.bin` — Uint8 per ephem step, bits = Goldstone / Madrid / Canberra can see the Moon above 10 deg. `commsWindow = earthVisible && dsn != 0`.
+- Not done by A: calibration of the uncertainty sigma against photos (two images are too few to calibrate on). Use the manifest `sigma_h` values as-is and label the bands "terrain-model uncertainty (LOLA error map)".
