@@ -163,9 +163,10 @@ def metrics(s, dsn=None, step_h=1.0):
     return out
 
 
-def horizon_draws(el, dist, sig, n=64, seed=0, smooth_deg=5.0):
+def horizon_draws(el, dist, sig, n=64, seed=0, smooth_deg=45.0):
     """n perturbed horizons (n, naz): Gaussian offsets, boxcar-smoothed over smooth_deg of azimuth,
-    renormalised to unit variance, scaled by sigma_el = atan(sigma_h / dist)."""
+    renormalised to unit variance, scaled by sigma_el = atan(sigma_h / dist).
+    smooth_deg = 45 and the manifest sigma_h are calibrated on NASA DEM clones (prep/calib.py)."""
     naz = len(el)
     k = max(1, int(round(smooth_deg / (360.0 / naz))))
     g = np.random.default_rng(seed).standard_normal((n, naz))
@@ -183,3 +184,17 @@ def uncertainty(s, draws):
     frac = sun_frac(s["sun_el"][None, :], hor, s["sun_dist"][None, :])
     pct = frac.mean(1)
     return {"p_lit": (frac > 0).mean(0), "pct_lit_mean": float(pct.mean()), "pct_lit_std": float(pct.std())}
+
+
+def battery(frac, panel_w=200.0, load_w=100.0, capacity_wh=1500.0, soc0=1.0, step_h=1.0):
+    """State of charge (0..1) per step and hours until the battery is empty (None = survives the window).
+    Power in = panel_w * visible Sun fraction (vertical, Sun-tracking panel: no cosine loss at the pole).
+    ponytail: constant load, no thermal or hibernation logic; add a load profile if a mission needs one."""
+    soc, e, dead = np.empty(len(frac)), soc0 * capacity_wh, None
+    for i, f in enumerate(frac):
+        e = min(capacity_wh, e + (panel_w * f - load_w) * step_h)
+        if e <= 0 and dead is None:
+            dead = (i + 1) * step_h
+        e = max(e, 0.0)
+        soc[i] = e / capacity_wh
+    return soc, dead
