@@ -66,7 +66,7 @@ class Dem:
                 c0 = c.astype(int) % t["w"]
                 c1 = (c0 + 1) % t["w"]
             r0 = np.minimum(r.astype(int), t["h"] - 2)
-            fc, fr = c - np.floor(c), r - r0
+            fc, fr = (c - np.floor(c) if t["proj"] == "eqc" else c - c0), r - r0  # c - c0 keeps the last column exact
             a = t["a"]
             v = (a[r0, c0] * (1 - fc) + a[r0, c1] * fc) * (1 - fr) + (a[r0 + 1, c0] * (1 - fc) + a[r0 + 1, c1] * fc) * fr
             h[ok] = t["offset"] + t["scale"] * v
@@ -111,3 +111,75 @@ def horizon_at(hor_el, az):
 def sun_frac(el_sun, hor, dist_sun):
     x = np.clip((el_sun - hor) / np.degrees(np.arcsin(SUN_R / dist_sun)), -1, 1)
     return 1 - (np.arccos(x) - x * np.sqrt(1 - x * x)) / np.pi
+
+
+# ---- time series, metrics, uncertainty (reference for web/src/core) ----
+
+def load_ephem():
+    meta = json.loads((DATA / "ephem.json").read_text())
+    return meta, np.fromfile(DATA / "ephem.bin", dtype="<f4").reshape(-1, 6).astype(float)
+
+
+def series(dem, eph, i0, n, lat, lon, mast=2.0, margin=0.0, hor=None):
+    """Hourly series from ephem step i0 for n steps. hor = (el, dist, sigma) to reuse a horizon."""
+    el, dist, sig = hor if hor is not None else horizon(dem, lat, lon, mast)
+    h = float(dem.sample(lat, lon)) + mast
+    v = eph[i0:i0 + n]
+    saz, sel, sd = azel(lat, lon, h, v[:, :3])
+    eaz, eel, _ = azel(lat, lon, h, v[:, 3:])
+    return {"sun_az": saz, "sun_el": sel, "sun_frac": sun_frac(sel, horizon_at(el, saz), sd),
+            "earth_az": eaz, "earth_el": eel, "earth_visible": eel - horizon_at(el, eaz) > margin,
+            "sun_dist": sd, "horizon": (el, dist, sig)}
+
+
+def _first(mask):
+    k = np.flatnonzero(mask)
+    return int(k[0]) if len(k) else None
+
+
+def _longest(mask):
+    best = run = 0
+    for m in mask:
+        run = run + 1 if m else 0
+        best = max(best, run)
+    return best
+
+
+def metrics(s, dsn=None, step_h=1.0):
+    """Metrics over the whole series window (use 708 hourly steps = one lunar day).
+    hours_to_* are None when the event does not happen inside the window."""
+    lit, ev = s["sun_frac"] > 0, s["earth_visible"]
+    f = lambda k: None if k is None else k * step_h
+    out = {"sun_el_now": float(s["sun_el"][0]), "sun_frac_now": float(s["sun_frac"][0]),
+           "earth_el_now": float(s["earth_el"][0]), "earth_visible_now": bool(ev[0]),
+           "hours_to_sunset": f(_first(~lit)) if lit[0] else 0.0,
+           "hours_to_sunrise": f(_first(lit)) if not lit[0] else 0.0,
+           "hours_to_earthset": f(_first(~ev)) if ev[0] else 0.0,
+           "hours_to_earthrise": f(_first(ev)) if not ev[0] else 0.0,
+           "pct_lit": float(s["sun_frac"].mean()), "longest_dark_h": _longest(~lit) * step_h,
+           "dte_hours": float(ev.sum() * step_h), "longest_no_earth_h": _longest(~ev) * step_h}
+    if dsn is not None:
+        out["comms_hours"] = float((ev & (dsn > 0)).sum() * step_h)
+    return out
+
+
+def horizon_draws(el, dist, sig, n=64, seed=0, smooth_deg=5.0):
+    """n perturbed horizons (n, naz): Gaussian offsets, boxcar-smoothed over smooth_deg of azimuth,
+    renormalised to unit variance, scaled by sigma_el = atan(sigma_h / dist)."""
+    naz = len(el)
+    k = max(1, int(round(smooth_deg / (360.0 / naz))))
+    g = np.random.default_rng(seed).standard_normal((n, naz))
+    g = sum(np.roll(g, j - k // 2, axis=1) for j in range(k)) / np.sqrt(k)
+    return el[None, :] + g * np.degrees(np.arctan2(sig, dist))[None, :]
+
+
+def uncertainty(s, draws):
+    """P(lit) per step and mean/std of pct_lit over horizon draws."""
+    naz = draws.shape[1]
+    i = s["sun_az"] / (360.0 / naz)
+    i0 = np.floor(i).astype(int)
+    f = i - i0
+    hor = draws[:, i0 % naz] * (1 - f) + draws[:, (i0 + 1) % naz] * f  # (n, steps)
+    frac = sun_frac(s["sun_el"][None, :], hor, s["sun_dist"][None, :])
+    pct = frac.mean(1)
+    return {"p_lit": (frac > 0).mean(0), "pct_lit_mean": float(pct.mean()), "pct_lit_std": float(pct.std())}
