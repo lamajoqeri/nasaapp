@@ -37,7 +37,7 @@ export function rows(m: Metrics, u: Uncertainty | null): Row[] {
   const dark = m.sunFrac === 0, hidden = !m.earthVisible;
   const sunH = dark ? m.hoursToSunrise : m.hoursToSunset;
   const earthH = hidden ? m.hoursToEarthrise : m.hoursToEarthset;
-  const lit = mean('pctLit'), longest = mean('longestDarkHours'), dte = mean('dteHours');
+  const lit = mean('pctLit'), longest = mean('longestDarkHours'), dte = mean('dteHours'), comms = mean('commsHours');
   return [
     { label: 'Sun elevation', text: deg(m.sunEl), sd: '', num: m.sunEl, f: deg, eps: 0.05, good: 0 },
     { label: 'Sun disk visible', text: pct(m.sunFrac * 100), sd: sd('sunFrac', (x) => pct(x * 100)), num: m.sunFrac * 100, f: pct, eps: 0.5, good: 1 },
@@ -54,6 +54,7 @@ export function rows(m: Metrics, u: Uncertainty | null): Row[] {
     { label: 'Sunlit, 29.5 d', text: pct(lit), sd: sd('pctLit', pct), num: lit, f: pct, eps: 0.5, good: 1 },
     { label: 'Longest dark', text: longest ? dur(longest) : 'none', sd: sd('longestDarkHours', dur), num: longest, f: dur, eps: 0.5, good: -1 },
     { label: 'Direct-to-Earth', text: `${dur(dte)} (${pct((100 * dte) / WIN_H)})`, sd: sd('dteHours', dur), num: dte, f: dur, eps: 0.5, good: 1 },
+    { label: 'Comms (DSN)', text: `${dur(comms)} (${pct((100 * comms) / WIN_H)})`, sd: sd('commsHours', dur), num: comms, f: dur, eps: 0.5, good: 1 },
   ];
 }
 
@@ -77,3 +78,10 @@ export function caption(m: Metrics): string {
     : `${m.earthEl > 0 ? 'Earth is hidden behind terrain' : 'Earth is below the horizon'} — ${m.hoursToEarthrise === null ? 'no direct comms within 29.5 d' : `no direct comms for ${dur(m.hoursToEarthrise)}`}`;
   return `${sun}. ${earth}.`;
 }
+
+const STATIONS = ['Goldstone', 'Madrid', 'Canberra'];
+/** DSN bits -> "Madrid, Canberra". */
+export const stations = (bits: number) => STATIONS.filter((_, i) => bits & (1 << i)).join(', ');
+
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+export const compass = (bearingDeg: number) => COMPASS[Math.round((((bearingDeg % 360) + 360) % 360) / 45) % 8];

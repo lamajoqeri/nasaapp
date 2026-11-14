@@ -1,7 +1,8 @@
 import { core, type ScenarioResult, type Site, type StripResult } from '../core/api';
 import { drawPanorama } from './panorama';
 import { drawStrip, stripSummary, stripTimeAt } from './strips';
-import { caption, DAY, delta, dur, isoMin, rows, utc } from './format';
+import { caption, compass, DAY, delta, dur, isoMin, rows, stations, utc } from './format';
+import { offset } from '../core/geom';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
 /** One scenario column. `site` is a sites.json id or 'custom'. */
@@ -11,6 +12,7 @@ const MASTS = [0, 2, 5, 10];
 const STEPS = 708;          // scrubber samples: 29.5 d hourly
 const PLAY_MS = 15000;      // one lunar day of playback
 const MAX_COLS = 4;
+const NUDGE_M = [50, 100, 200, 500];
 const DEFAULT_T = Date.parse('2026-12-01T00:00:00Z');
 
 let sites: SiteRec[] = [];
@@ -25,6 +27,8 @@ class Col {
   el: HTMLElement;
   base?: ScenarioResult; strip?: StripResult; slipped?: ScenarioResult;
   token = 0; slipToken = 0;
+  /** Nudge: the site before the first nudge, its result, and the summed move in local east/north meters. */
+  origin?: { site: string; lat: number; lon: number; name: string }; orig?: ScenarioResult; moved = [0, 0];
 
   constructor(public spec: Spec) {
     this.el = document.createElement('section');
@@ -35,6 +39,12 @@ class Col {
         <label>Lat <input class="lat" type="number" step="any" min="-90" max="90"></label>
         <label>Lon <input class="lon" type="number" step="any" min="-180" max="360"></label>
       </div>
+      <div class="ctl nudge">
+        <span>Nudge</span>
+        <select class="nd" aria-label="Nudge distance">${NUDGE_M.map((m) => `<option value="${m}"${m === 100 ? ' selected' : ''}>${m} m</option>`).join('')}</select>
+        ${[['N', 0], ['E', 90], ['S', 180], ['W', 270]].map(([d, b]) => `<button data-b="${b}" title="Move the site ${d === 'N' ? 'north' : d === 'E' ? 'east' : d === 'S' ? 'south' : 'west'}">${d}</button>`).join('')}
+      </div>
+      <p class="moved" hidden></p>
       <div class="ctl">
         <label class="grow">Landing (UTC) <input class="date" type="datetime-local" step="3600"></label>
         <label>Mast <select class="mast">${MASTS.map((m) => `<option value="${m}">${m} m</option>`).join('')}</select></label>
@@ -61,6 +71,7 @@ class Col {
     sel.onchange = () => {
       const s = sites.find((x) => x.id === sel.value);
       this.spec.site = sel.value;
+      this.origin = undefined;
       if (s) { this.spec.lat = s.lat; this.spec.lon = s.lon; }
       this.sync(); this.compute(); saveHash();
     };
@@ -68,7 +79,7 @@ class Col {
     lat.onchange = lon.onchange = () => {
       const a = lat.valueAsNumber, o = lon.valueAsNumber;
       if (!(Math.abs(a) <= 90) || !(o >= -180 && o <= 360)) return this.status('Latitude must be -90..90 and longitude -180..360.', 'err');
-      this.spec.lat = a; this.spec.lon = o; this.compute(); saveHash();
+      this.spec.lat = a; this.spec.lon = o; this.origin = undefined; this.sync(); this.compute(); saveHash();
     };
     const date = $<HTMLInputElement>('.date', this.el);
     date.onchange = () => {
@@ -88,9 +99,29 @@ class Col {
     this.el.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-t]');
       if (b) { this.spec.t = clampT(+b.dataset.t!); this.sync(); this.compute(); saveHash(); }
+      const n = (e.target as HTMLElement).closest<HTMLElement>('[data-b]');
+      if (n) this.nudge(+n.dataset.b!, +$<HTMLSelectElement>('.nd', this.el).value);
+      if ((e.target as HTMLElement).closest('.reset')) this.nudge(0, 0, true);
     });
     this.sync();
     this.compute();
+  }
+
+  /** Move the site m meters along bearing b (deg from local north) of the original site; reset goes back to it. */
+  nudge(b: number, m: number, reset = false) {
+    const { spec } = this;
+    const o = (this.origin ??= { site: spec.site, lat: spec.lat, lon: spec.lon, name: this.name() });
+    if (reset) this.moved = [0, 0];
+    else { this.moved[0] += m * Math.sin(b * Math.PI / 180); this.moved[1] += m * Math.cos(b * Math.PI / 180); }
+    const dist = Math.hypot(this.moved[0], this.moved[1]);
+    if (dist < 1) {
+      Object.assign(spec, { site: o.site, lat: o.lat, lon: o.lon });
+      this.origin = undefined; this.moved = [0, 0];
+    } else {
+      const [lat, lon] = offset(o.lat, o.lon, Math.atan2(this.moved[0], this.moved[1]) * 180 / Math.PI, dist);
+      Object.assign(spec, { site: 'custom', lat: +lat.toFixed(6), lon: +lon.toFixed(6) });
+    }
+    this.sync(); this.compute(); saveHash();
   }
 
   rec() { return sites.find((s) => s.id === this.spec.site); }
@@ -115,6 +146,13 @@ class Col {
         : ` Landed ${esc(rec.date)}. <button class="link" data-t="${t}">Use landing date</button>`;
     }
     $('.note', this.el).innerHTML = note;
+    const mv = $('.moved', this.el), o = this.origin;
+    if (!o) { this.moved = [0, 0]; this.orig = undefined; }
+    mv.hidden = !o;
+    if (o) {
+      const [e, n] = this.moved;
+      mv.innerHTML = `Moved ${Math.round(Math.hypot(e, n))} m ${compass(Math.atan2(e, n) * 180 / Math.PI)} of ${esc(o.name)}. <button class="link reset">Back to original</button>`;
+    }
   }
 
   status(text: string, cls = '') { const s = $('.status', this.el); s.textContent = text; s.className = 'status ' + cls; }
@@ -124,11 +162,14 @@ class Col {
     this.slipToken++;
     this.el.classList.add('busy');
     this.status('Computing horizon… the first polar site downloads ~20 MB of terrain.', 'busy');
-    const s = this.site(), t = this.spec.t;
+    const s = this.site(), t = this.spec.t, o = this.origin;
     try {
-      const [b, st] = await Promise.all([core.scenario(s, t), core.strip(s, Math.min(t, range.t1 - 365 * DAY), Math.min(t, range.t1 - 365 * DAY) + 365 * DAY)]);
+      const [b, st, orig] = await Promise.all([
+        core.scenario(s, t), core.strip(s, Math.min(t, range.t1 - 365 * DAY), Math.min(t, range.t1 - 365 * DAY) + 365 * DAY),
+        o ? core.scenario({ lat: o.lat, lon: o.lon, mast: this.spec.mast }, t, { mc: false }) : undefined,
+      ]);
       if (tok !== this.token) return;
-      this.base = b; this.strip = st; this.slipped = undefined;
+      this.base = b; this.strip = st; this.slipped = undefined; this.orig = orig;
       this.status('');
       this.el.classList.remove('busy');
       this.render();
@@ -156,11 +197,13 @@ class Col {
     $('.cap', this.el).textContent = caption(b.metrics);
     const br = rows(b.metrics, b.uncertainty);
     const sr = slip && this.slipped ? rows(this.slipped.metrics, null) : null;
-    const cmp = sr && rows(b.metrics, null); // slip has no MC: compare deterministic to deterministic
-    const head = `<tr><th></th><th>At landing</th>${slip ? `<th>Delayed ${slip} d</th>` : ''}</tr>`;
+    const cmp = rows(b.metrics, null); // deltas have no MC: compare deterministic to deterministic
+    const or = this.origin && this.orig ? rows(this.orig.metrics, null) : null;
+    const head = `<tr><th></th><th>At landing</th>${this.origin ? '<th>vs original</th>' : ''}${slip ? `<th>Delayed ${slip} d</th>` : ''}</tr>`;
+    const td = (d: { text: string; cls: string } | null, was?: string) =>
+      `<td class="d ${d?.cls ?? 'pending'}"${was ? ` title="original: ${esc(was)}"` : ''}>${d ? esc(d.text) : '…'}</td>`;
     $('.m', this.el).innerHTML = head + br.map((r, i) => {
-      const d = sr && cmp ? delta(cmp[i], sr[i]) : null;
-      const cell = slip ? `<td class="d ${d?.cls ?? 'pending'}">${d ? esc(d.text) : '…'}</td>` : '';
+      const cell = (this.origin ? td(or && delta(or[i], cmp[i]), or?.[i].text) : '') + (slip ? td(sr && delta(cmp[i], sr[i])) : '');
       return `<tr><th>${r.label}</th><td>${esc(r.text)}<small>${esc(r.sd)}</small></td>${cell}</tr>`;
     }).join('');
     if (this.strip) {
@@ -183,7 +226,7 @@ class Col {
     drawPanorama($<HTMLCanvasElement>('.pano', this.el), b, { idx: i, label: this.name() });
     const p = b.uncertainty ? `, P(lit) ${Math.round(b.uncertainty.pLit[i] * 100)}%` : '';
     $('.now', this.el).textContent =
-      `${utc(s.t[i])}: Sun ${s.sunEl[i].toFixed(1)}°, ${s.sunFrac[i] > 0 && s.sunFrac[i] < 0.005 ? '<1' : Math.round(s.sunFrac[i] * 100)}% visible${p}; Earth ${s.earthVis[i] ? 'in view' : 'hidden'}`;
+      `${utc(s.t[i])}: Sun ${s.sunEl[i].toFixed(1)}°, ${s.sunFrac[i] > 0 && s.sunFrac[i] < 0.005 ? '<1' : Math.round(s.sunFrac[i] * 100)}% visible${p}; Earth ${s.earthVis[i] ? `in view · ${stations(s.dsn[i]) || 'no DSN station'}` : 'hidden'}`;
   }
 }
 
@@ -282,7 +325,8 @@ export async function start(root: HTMLElement) {
     <footer>
       Metrics cover the 29.5-day window from the landing date. “±” is the 1σ spread from a horizon Monte Carlo over terrain uncertainty.
       Ephemeris covers 2024–2040: historical landings (Apollo, Chang'e 3–5, Chandrayaan-3) show their site at the date you pick.
-      Deltas compare the delayed landing to the planned one: <span class="good">better</span> / <span class="bad">worse</span>.
+      Deltas compare the delayed landing to the planned one, and a nudged site to the original: <span class="good">better</span> / <span class="bad">worse</span>.
+      Comms (DSN) = Earth above the terrain and a Deep Space Network dish (Goldstone, Madrid, Canberra) seeing the Moon above 10°.
     </footer>`;
   try {
     const [list, r] = await Promise.all([
