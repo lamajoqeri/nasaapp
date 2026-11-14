@@ -1,0 +1,1 @@
+{"tiles": [{"id": "gauss_200m", "file": "gauss_200m.bin", "proj": "spstere", "w": 600, "h": 600, "x0": -59900.0, "y0": 59900.0, "px": 200.0, "dtype": "int16", "scale": 0.1, "offset": 0.0, "sigma_h": 1.0}]}

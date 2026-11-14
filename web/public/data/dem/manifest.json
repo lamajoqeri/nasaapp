@@ -1,0 +1,102 @@
+{
+ "tiles": [
+  {
+   "id": "shackleton_20m",
+   "file": "shackleton_20m.bin",
+   "w": 2000,
+   "h": 2000,
+   "dtype": "int16",
+   "scale": 0.08,
+   "offset": -456.0,
+   "proj": "spstere",
+   "x0": -29990,
+   "y0": 9990,
+   "px": 20,
+   "sigma_h": 0.19
+  },
+  {
+   "id": "mouton_nobile_20m",
+   "file": "mouton_nobile_20m.bin",
+   "w": 2000,
+   "h": 2000,
+   "dtype": "int16",
+   "scale": 0.11,
+   "offset": 3417.0,
+   "proj": "spstere",
+   "x0": 60010,
+   "y0": 139990,
+   "px": 20,
+   "sigma_h": 0.21
+  },
+  {
+   "id": "malapert_20m",
+   "file": "malapert_20m.bin",
+   "w": 1000,
+   "h": 1000,
+   "dtype": "int16",
+   "scale": 0.06,
+   "offset": 3225.0,
+   "proj": "spstere",
+   "x0": -9990,
+   "y0": 130990,
+   "px": 20,
+   "sigma_h": 0.19
+  },
+  {
+   "id": "haworth_20m",
+   "file": "haworth_20m.bin",
+   "w": 1000,
+   "h": 1000,
+   "dtype": "int16",
+   "scale": 0.05,
+   "offset": 1336.0,
+   "proj": "spstere",
+   "x0": -47990,
+   "y0": 99990,
+   "px": 20,
+   "sigma_h": 0.18
+  },
+  {
+   "id": "degerlache_20m",
+   "file": "degerlache_20m.bin",
+   "w": 1000,
+   "h": 1000,
+   "dtype": "int16",
+   "scale": 0.05,
+   "offset": 388.0,
+   "proj": "spstere",
+   "x0": -46990,
+   "y0": 24990,
+   "px": 20,
+   "sigma_h": 0.19
+  },
+  {
+   "id": "sp_240m",
+   "file": "sp_240m.bin",
+   "w": 2533,
+   "h": 2533,
+   "dtype": "int16",
+   "scale": 0.23,
+   "offset": -130.0,
+   "proj": "spstere",
+   "x0": -303880,
+   "y0": 303880,
+   "px": 240,
+   "sigma_h": 10
+  },
+  {
+   "id": "global_8ppd",
+   "file": "global_8ppd.bin",
+   "w": 2880,
+   "h": 1440,
+   "dtype": "int16",
+   "scale": 0.5,
+   "offset": 0.0,
+   "proj": "eqc",
+   "lon0": 0.0625,
+   "lat0": 89.9375,
+   "ppd": 8,
+   "sigma_h": 50
+  }
+ ]
+}
