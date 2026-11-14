@@ -24,7 +24,7 @@
   "lon": -68.4,
   "program": "Artemis III region",
   "date": null,
-  "note": "Representative point (PGDA Site11 centre). Best-lit point within 3 km (PGDA average: Sun 83%, Earth 61%)."
+  "note": "Best-lit point within 3 km (PGDA average: Sun 83%, Earth 61%)."
  },
  {
   "id": "malapert",
@@ -42,7 +42,7 @@
   "lon": 37.563,
   "program": "Artemis III region",
   "date": null,
-  "note": "Representative point (PGDA Site06 centre). Best-lit point within 3 km (PGDA average: Sun 77%, Earth 67%)."
+  "note": "Best-lit point within 3 km (PGDA average: Sun 77%, Earth 67%)."
  },
  {
   "id": "mons_mouton",
@@ -60,7 +60,7 @@
   "lon": -21.658,
   "program": "Artemis III region",
   "date": null,
-  "note": "Representative point (PGDA Haworth tile centre). Best-lit point within 3 km (PGDA average: Sun 51%, Earth 65%)."
+  "note": "Best-lit point within 3 km (PGDA average: Sun 51%, Earth 65%)."
  },
  {
   "id": "im2",
