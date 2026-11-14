@@ -1,6 +1,7 @@
 import { core, type ScenarioResult, type Site, type StripResult } from '../core/api';
 import { drawPanorama } from './panorama';
 import { drawStrip, stripSummary, stripTimeAt } from './strips';
+import { createMap } from './map';
 import { caption, DAY, delta, dur, isoMin, rows, utc } from './format';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
@@ -14,12 +15,18 @@ const MAX_COLS = 4;
 const DEFAULT_T = Date.parse('2026-12-01T00:00:00Z');
 
 let sites: SiteRec[] = [];
-let range = { t0: -Infinity, t1: Infinity };
+let ranges = [{ t0: -Infinity, t1: Infinity }]; // ephemeris tables, time order
 let slip = 0, idx = 0, playing = false;
 const cols: Col[] = [];
+let active: Col | undefined;        // the column the map edits
+let map: { draw(): void } | undefined;
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-const clampT = (t: number) => Math.min(range.t1 - 29.5 * DAY, Math.max(range.t0, t));
+/** Nearest landing time whose 29.5-day window fits inside one ephemeris table. */
+const clampT = (t: number) => ranges
+  .map((r) => Math.min(r.t1 - 29.5 * DAY, Math.max(r.t0, t)))
+  .reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a));
+const rangeOf = (t: number) => ranges.find((r) => t >= r.t0 && t <= r.t1) ?? ranges[ranges.length - 1];
 
 class Col {
   el: HTMLElement;
@@ -60,10 +67,10 @@ class Col {
 
     sel.onchange = () => {
       const s = sites.find((x) => x.id === sel.value);
-      this.spec.site = sel.value;
-      if (s) { this.spec.lat = s.lat; this.spec.lon = s.lon; }
-      this.sync(); this.compute(); saveHash();
+      this.setSite(sel.value, s?.lat ?? this.spec.lat, s?.lon ?? this.spec.lon);
     };
+    this.el.addEventListener('pointerdown', () => setActive(this));
+    this.el.addEventListener('focusin', () => setActive(this));
     const lat = $<HTMLInputElement>('.lat', this.el), lon = $<HTMLInputElement>('.lon', this.el);
     lat.onchange = lon.onchange = () => {
       const a = lat.valueAsNumber, o = lon.valueAsNumber;
@@ -93,6 +100,11 @@ class Col {
     this.compute();
   }
 
+  setSite(id: string, lat: number, lon: number) {
+    Object.assign(this.spec, { site: id, lat, lon });
+    this.sync(); this.compute(); saveHash();
+  }
+
   rec() { return sites.find((s) => s.id === this.spec.site); }
   name() { return this.rec()?.name ?? `${this.spec.lat.toFixed(3)}°, ${this.spec.lon.toFixed(3)}°`; }
   site(): Site { return { lat: this.spec.lat, lon: this.spec.lon, mast: this.spec.mast }; }
@@ -105,14 +117,15 @@ class Col {
     $<HTMLInputElement>('.lat', this.el).value = String(spec.lat);
     $<HTMLInputElement>('.lon', this.el).value = String(spec.lon);
     const date = $<HTMLInputElement>('.date', this.el);
-    date.min = isoMin(range.t0); date.max = isoMin(clampT(Infinity)); date.value = isoMin(spec.t);
+    date.min = isoMin(ranges[0].t0); date.max = isoMin(clampT(Infinity)); date.value = isoMin(spec.t);
     $<HTMLSelectElement>('.mast', this.el).value = String(spec.mast);
     let note = rec?.note ? esc(rec.note) : 'Custom point. Polar sites (south of 80°S) use high-resolution terrain.';
     if (rec?.date) {
-      const t = Date.parse(rec.date + 'T00:00:00Z');
-      note += t < range.t0
-        ? ` Landed ${esc(rec.date)}, before our 2024–2040 ephemeris: shown at the date you pick.`
-        : ` Landed ${esc(rec.date)}. <button class="link" data-t="${t}">Use landing date</button>`;
+      const t = Date.parse(rec.date + 'T00:00:00Z'), c = clampT(t);
+      note += Math.abs(c - t) > 30 * DAY
+        ? ` Landed ${esc(rec.date)}, outside our ephemeris (1969–1972, 2024–2040): shown at the date you pick.`
+        : ` Landed ${esc(rec.date)}. <button class="link" data-t="${t}">Use landing date</button>`
+          + (c !== t ? ` (window starts ${isoMin(c).slice(0, 10)} so it fits the ephemeris)` : '');
     }
     $('.note', this.el).innerHTML = note;
   }
@@ -126,7 +139,8 @@ class Col {
     this.status('Computing horizon… the first polar site downloads ~20 MB of terrain.', 'busy');
     const s = this.site(), t = this.spec.t;
     try {
-      const [b, st] = await Promise.all([core.scenario(s, t), core.strip(s, Math.min(t, range.t1 - 365 * DAY), Math.min(t, range.t1 - 365 * DAY) + 365 * DAY)]);
+      const y0 = Math.max(rangeOf(t).t0, Math.min(t, rangeOf(t).t1 - 365 * DAY));
+      const [b, st] = await Promise.all([core.scenario(s, t), core.strip(s, y0, y0 + 365 * DAY)]);
       if (tok !== this.token) return;
       this.base = b; this.strip = st; this.slipped = undefined;
       this.status('');
@@ -197,11 +211,22 @@ function removeCol(c: Col) {
   if (cols.length <= 1) return;
   cols.splice(cols.indexOf(c), 1);
   c.el.remove();
+  if (active === c) setActive(cols[0]);
   updateButtons(); saveHash();
 }
 function updateButtons() {
   $<HTMLButtonElement>('#add').disabled = cols.length >= MAX_COLS;
-  for (const c of cols) $<HTMLButtonElement>('.rm', c.el).disabled = cols.length <= 1;
+  for (const c of cols) {
+    $<HTMLButtonElement>('.rm', c.el).disabled = cols.length <= 1;
+    c.el.classList.toggle('active', c === active && cols.length > 1);
+  }
+}
+
+function setActive(c: Col) {
+  if (active === c) return;
+  active = c;
+  updateButtons();
+  map?.draw();
 }
 
 // URL hash: #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N
@@ -210,6 +235,7 @@ function saveHash() {
   for (const { spec } of cols) p.append('c', `${spec.site === 'custom' ? `${spec.lat},${spec.lon}` : spec.site}~${isoMin(spec.t)}~${spec.mast}`);
   if (slip) p.set('slip', String(slip));
   history.replaceState(null, '', '#' + p.toString());
+  map?.draw(); // every spec change ends here
 }
 function loadHash(): Spec[] {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -277,11 +303,12 @@ export async function start(root: HTMLElement) {
       </div>
     </div>
     <p id="err" class="status err"></p>
+    <section id="map" class="mapbox"></section>
     <main id="cols"></main>
     <div class="actions"><button id="add">+ Add scenario</button></div>
     <footer>
       Metrics cover the 29.5-day window from the landing date. “±” is the 1σ spread from a horizon Monte Carlo over terrain uncertainty.
-      Ephemeris covers 2024–2040: historical landings (Apollo, Chang'e 3–5, Chandrayaan-3) show their site at the date you pick.
+      Ephemeris covers 1969-07 to 1972 (Apollo, on their real dates) and 2024–2040; other historical landings (Chang'e 3–5, Chandrayaan-3) show their site at the date you pick.
       Deltas compare the delayed landing to the planned one: <span class="good">better</span> / <span class="bad">worse</span>.
     </footer>`;
   try {
@@ -289,13 +316,16 @@ export async function start(root: HTMLElement) {
       fetch(import.meta.env.BASE_URL + 'data/sites.json').then((x) => { if (!x.ok) throw new Error(`sites.json: HTTP ${x.status}`); return x.json(); }),
       core.range(),
     ]);
-    sites = list; range = r;
+    sites = list; ranges = r.ranges;
   } catch (e) {
     $('#err').textContent = `Could not load data: ${(e as Error).message}`;
     return;
   }
   const specs = loadHash();
   (specs.length ? specs : defaults()).forEach(addCol);
+  setActive(cols[0]);
+  map = createMap($('#map'), sites, () => cols.map((c) => ({ lat: c.spec.lat, lon: c.spec.lon, label: c.name(), active: c === active })),
+    (id, lat, lon) => active?.setSite(id ?? 'custom', lat, lon));
   saveHash();
 
   const slipIn = $<HTMLInputElement>('#slip');
@@ -315,6 +345,6 @@ export async function start(root: HTMLElement) {
   $('#add').onclick = () => { addCol({ ...cols[cols.length - 1].spec }); saveHash(); };
 
   let raf = 0;
-  addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => cols.forEach((c) => c.render())); });
+  addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { cols.forEach((c) => c.render()); map?.draw(); }); });
   addEventListener('hashchange', () => location.reload()); // pasted share link; replaceState doesn't fire this
 }
