@@ -11,6 +11,7 @@ export interface Series {
   sunRadius: Float32Array; // deg
   earthAz: Float32Array; earthEl: Float32Array;
   earthVis: Uint8Array;
+  dsn: Uint8Array;        // DSN stations with the Moon >10° up: bit0 Goldstone, bit1 Madrid, bit2 Canberra
 }
 
 /** Sun/Earth geometry vs the terrain horizon from t0 to t1 (ms, t1 exclusive) every stepMs. */
@@ -19,7 +20,7 @@ export function series(eph: Ephem, site: Site, hor: Horizon, t0: number, t1: num
   const s: Series = {
     t: new Float64Array(n), stepMs,
     sunAz: new Float32Array(n), sunEl: new Float32Array(n), sunFrac: new Float32Array(n), sunRadius: new Float32Array(n),
-    earthAz: new Float32Array(n), earthEl: new Float32Array(n), earthVis: new Uint8Array(n),
+    earthAz: new Float32Array(n), earthEl: new Float32Array(n), earthVis: new Uint8Array(n), dsn: new Uint8Array(n),
   };
   const { e, n: no, u } = enu(site.lat, site.lon);
   const r = R + hor.hSite;
@@ -43,6 +44,7 @@ export function series(eph: Ephem, site: Site, hor: Horizon, t0: number, t1: num
     s.sunFrac[i] = frac(sel - horizonAt(hor.el, saz), rad);
     s.earthAz[i] = eaz; s.earthEl[i] = eel;
     s.earthVis[i] = eel - horizonAt(hor.el, eaz) > earthMargin ? 1 : 0;
+    s.dsn[i] = eph.dsnAt(t);
   }
   return s;
 }
@@ -65,19 +67,20 @@ export interface Metrics {
   longestNoEarthHours: number;
   dteHours: number;               // hours with Earth above the horizon
   pctEarth: number;
+  commsHours: number;             // Earth in view AND a DSN station up (prep/geom.py comms_hours)
 }
 
 /** Metrics over a series (window = the whole series, starting at its first sample). */
 export function metrics(s: Series, sunFracOverride?: ArrayLike<number>, earthVisOverride?: ArrayLike<number>): Metrics {
   const sf = sunFracOverride ?? s.sunFrac, ev = earthVisOverride ?? s.earthVis;
   const n = s.t.length, h = s.stepMs / 3600e3;
-  let sum = 0, any = 0, run = 0, longest = 0, earth = 0, erun = 0, elongest = 0;
+  let sum = 0, any = 0, comms = 0, run = 0, longest = 0, earth = 0, erun = 0, elongest = 0;
   let sunset: number | null = null, sunrise: number | null = null, earthset: number | null = null, earthrise: number | null = null;
   const darkNow = sf[0] === 0, hiddenNow = !ev[0];
   for (let i = 0; i < n; i++) {
     sum += sf[i];
     if (sf[i] > 0) { any++; run = 0; } else { run++; longest = Math.max(longest, run); }
-    if (ev[i]) { earth++; erun = 0; } else { erun++; elongest = Math.max(elongest, erun); }
+    if (ev[i]) { earth++; erun = 0; if (s.dsn[i]) comms++; } else { erun++; elongest = Math.max(elongest, erun); }
     if (sunset === null && !darkNow && sf[i] === 0) sunset = i * h;
     if (sunrise === null && darkNow && sf[i] > 0) sunrise = i * h;
     if (earthset === null && !hiddenNow && !ev[i]) earthset = i * h;
@@ -89,5 +92,6 @@ export function metrics(s: Series, sunFracOverride?: ArrayLike<number>, earthVis
     hoursToEarthset: hiddenNow ? 0 : earthset, hoursToEarthrise: hiddenNow ? earthrise : 0,
     pctLit: (100 * sum) / n, pctAnyLit: (100 * any) / n,
     longestDarkHours: longest * h, longestNoEarthHours: elongest * h, dteHours: earth * h, pctEarth: (100 * earth) / n,
+    commsHours: comms * h,
   };
 }

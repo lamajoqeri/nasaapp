@@ -58,3 +58,11 @@ export function horizonAt(hor: ArrayLike<number>, az: number): number {
   const i0 = Math.floor(i), f = i - i0, n = hor.length;
   return hor[((i0 % n) + n) % n] * (1 - f) + hor[(((i0 + 1) % n) + n) % n] * f;
 }
+
+/** Point `m` meters from (lat, lon) along bearing `bearingDeg` (0 = local north, 90 = east), great circle on the R sphere. */
+export function offset(lat: number, lon: number, bearingDeg: number, m: number): [number, number] {
+  const la = lat * DEG, d = m / R, b = bearingDeg * DEG;
+  const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+  const dlo = Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
+  return [la2 / DEG, ((((lon * DEG + dlo) / DEG) + 540) % 360) - 180];
+}

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { Dem } from './dem';
 import { Ephem } from './ephem';
-import { azel } from './geom';
+import { azel, offset, unit, R } from './geom';
 import { horizon } from './horizon';
 import { metrics, series } from './series';
 import { monteCarlo } from './mc';
@@ -49,11 +49,26 @@ describe('fixture', () => {
   });
 });
 
+describe('offset', () => {
+  it('moves the right distance and direction, even next to the pole', () => {
+    for (const [lat, lon] of [[-89.474, -137.414], [0.67, 23.47], [45, 170]]) {
+      for (const b of [0, 45, 90, 180, 270]) {
+        const [la2, lo2] = offset(lat, lon, b, 100);
+        const a = unit(lat, lon), c = unit(la2, lo2);
+        const ang = Math.acos(Math.min(1, a[0] * c[0] + a[1] * c[1] + a[2] * c[2]));
+        expect(Math.abs(ang * R - 100)).toBeLessThan(0.01);
+        const g = azel(lat, lon, 0, (c[0] * R) / 1000, (c[1] * R) / 1000, (c[2] * R) / 1000);
+        expect(angDiff(g.az, b), `${lat} b${b}`).toBeLessThan(0.01);
+      }
+    }
+  });
+});
+
 describe('matches prep/geom.py on real sites (fixture/series_check.json)', () => {
   it('sun_frac, Earth clearance, metrics, MC spread', async () => {
     const checks = await json('fixture/series_check.json');
     const dem = await Dem.open((f) => buf('dem/' + f));
-    const eph = new Ephem(await json('ephem.json'), await buf('ephem.bin'));
+    const eph = new Ephem(await json('ephem.json'), await buf('ephem.bin'), await buf('dsn.bin'));
     for (const c of checks) {
       const site = { lat: c.lat, lon: c.lon, mast: c.mast };
       await dem.ensure(site.lat, site.lon);
@@ -73,7 +88,7 @@ describe('matches prep/geom.py on real sites (fixture/series_check.json)', () =>
       const hrs: [number | null, number | null][] = [
         [m.hoursToSunset, r.hours_to_sunset], [m.hoursToSunrise, r.hours_to_sunrise],
         [m.hoursToEarthset, r.hours_to_earthset], [m.hoursToEarthrise, r.hours_to_earthrise],
-        [m.longestDarkHours, r.longest_dark_h], [m.dteHours, r.dte_hours], [m.longestNoEarthHours, r.longest_no_earth_h],
+        [m.longestDarkHours, r.longest_dark_h], [m.dteHours, r.dte_hours], [m.longestNoEarthHours, r.longest_no_earth_h], [m.commsHours, r.comms_hours],
       ];
       for (const [a, b] of hrs) b === null ? expect(a, c.site).toBeNull() : expect(Math.abs(a! - b), c.site).toBeLessThanOrEqual(1);
       expect(Math.abs(m.pctLit / 100 - r.pct_lit), c.site).toBeLessThan(0.01);

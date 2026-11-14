@@ -6,8 +6,11 @@ export class Ephem {
   readonly t1: number;     // ms, last valid instant
   readonly stepMs: number;
   private a: Float32Array;
+  private dsn?: Uint8Array;
 
-  constructor(meta: EphemMeta, buf: ArrayBuffer) {
+  /** dsn: optional dsn.bin (Uint8 per step, bit0 Goldstone, bit1 Madrid, bit2 Canberra). */
+  constructor(meta: EphemMeta, buf: ArrayBuffer, dsn?: ArrayBuffer) {
+    if (dsn) this.dsn = new Uint8Array(dsn);
     this.t0 = Date.parse(meta.t0);
     this.stepMs = meta.step_s * 1000;
     this.a = new Float32Array(buf);
@@ -17,6 +20,12 @@ export class Ephem {
 
   clamp(t: number): number {
     return Math.max(this.t0, Math.min(this.t1, t));
+  }
+
+  /** DSN station bits at the nearest step (0 when dsn.bin was not given). */
+  dsnAt(t: number): number {
+    if (!this.dsn) return 0;
+    return this.dsn[Math.min(this.dsn.length - 1, Math.max(0, Math.round((t - this.t0) / this.stepMs)))];
   }
 
   /** Writes [sun xyz, earth xyz] km into out. t in ms, clamped to the table. */
