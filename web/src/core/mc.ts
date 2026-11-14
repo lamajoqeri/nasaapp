@@ -2,6 +2,8 @@ import { DEG, horizonAt } from './geom';
 import type { Horizon } from './horizon';
 import { frac, metrics, type Metrics, type Series } from './series';
 
+export const SMOOTH_DEG = 45;
+
 export interface Uncertainty {
   pLit: Float32Array;                            // P(sunFrac > 0) per series sample
   mean: Record<keyof Metrics, number>;
@@ -20,8 +22,9 @@ function rng(seed: number) { // mulberry32
 /** Horizon-space Monte Carlo (CONTRACT.md "Uncertainty"). Deterministic for a given seed. */
 export function monteCarlo(s: Series, hor: Horizon, earthMargin = 0, draws = 64, seed = 1): Uncertainty {
   const naz = hor.el.length, n = s.t.length;
-  const half = Math.round(2.5 / (360 / naz)); // 5 deg box = 2*half+1 bins
-  const k = 2 * half + 1, norm = Math.sqrt(k) / k;
+  // CONTRACT: boxcar over 45 deg (calibrated on NASA DEM clones), unit variance. Same window as prep/geom.py.
+  const k = Math.max(1, Math.round(SMOOTH_DEG / (360 / naz))), lo = k - 1 - Math.floor(k / 2), hi = Math.floor(k / 2);
+  const norm = 1 / Math.sqrt(k);
   const sigEl = new Float32Array(naz);
   for (let i = 0; i < naz; i++) sigEl[i] = Math.atan(hor.sigmaH[i] / hor.dist[i]) / DEG;
 
@@ -37,7 +40,7 @@ export function monteCarlo(s: Series, hor: Horizon, earthMargin = 0, draws = 64,
     for (let i = 0; i < naz; i++) g[i] = gauss();
     for (let i = 0; i < naz; i++) {
       let sum = 0;
-      for (let j = -half; j <= half; j++) sum += g[(i + j + naz) % naz];
+      for (let j = -lo; j <= hi; j++) sum += g[(i + j + naz) % naz];
       el[i] = hor.el[i] + sum * norm * sigEl[i];
     }
     for (let i = 0; i < n; i++) {
