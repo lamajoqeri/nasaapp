@@ -54,6 +54,10 @@ async function handle(req: Request): Promise<unknown> {
       const main = ephs[ephs.length - 1];
       return { t0: main.t0, t1: main.t1, ranges: ephs.map((e) => ({ t0: e.t0, t1: e.t1 })) };
     }
+    case 'sunVector': {
+      const v = pickEphem(ephs, req.t).at(req.t);
+      return { sun: [v[0], v[1], v[2]], earth: [v[3], v[4], v[5]] };
+    }
     case 'scenario': {
       const h = await hor(req.site);
       // No silent clamp: a shifted or truncated window would be compared as if it were the asked-for one.

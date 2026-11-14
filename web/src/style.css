@@ -95,3 +95,11 @@ table.how tr:first-child th { font-size: inherit; }
 canvas.map { cursor: crosshair; touch-action: manipulation; }
 .maplegend { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
 .col.active { border-color: var(--accent); }
+#v3d { margin: 12px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+#v3d summary { cursor: pointer; font-weight: 600; }
+.v3d-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin: 8px 0; color: var(--muted); }
+.v3d-wrap { position: relative; }
+.v3d-wrap[hidden] { display: none; }
+canvas.v3d { height: min(70vh, 640px); touch-action: none; }
+.v3d-hud { position: absolute; left: 8px; top: 6px; font-size: 12px; color: var(--fg); text-shadow: 0 0 3px #000; pointer-events: none; }
+.v3d-dbg { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
