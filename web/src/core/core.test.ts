@@ -49,6 +49,42 @@ describe('fixture', () => {
   });
 });
 
+describe('matches prep/geom.py on real sites (fixture/series_check.json)', () => {
+  it('sun_frac, Earth clearance, metrics, MC spread', async () => {
+    const checks = await json('fixture/series_check.json');
+    const dem = await Dem.open((f) => buf('dem/' + f));
+    const eph = new Ephem(await json('ephem.json'), await buf('ephem.bin'));
+    for (const c of checks) {
+      const site = { lat: c.lat, lon: c.lon, mast: c.mast };
+      await dem.ensure(site.lat, site.lon);
+      const h = horizon(dem, site.lat, site.lon, site.mast);
+      const t0 = Date.parse(c.t0);
+      const s = series(eph, site, h, t0, t0 + c.n * c.step_s * 1000, c.step_s * 1000);
+      expect(s.t.length, c.site).toBe(c.n);
+      c.horizon_el_every_10deg.forEach((v: number, i: number) => expect(Math.abs(h.el[i * 20] - v), `${c.site} hor ${i * 10}`).toBeLessThan(0.02));
+      let bad = 0;
+      for (let i = 0; i < c.n; i++) {
+        const d = Math.abs(s.sunFrac[i] - c.sun_frac[i]);
+        expect(d, `${c.site} sunFrac[${i}]`).toBeLessThan(0.05);
+        if (d > 0.01) bad++;
+      }
+      expect(bad, `${c.site} steps off by >0.01`).toBeLessThanOrEqual(3);
+      const m = metrics(s), r = c.metrics;
+      const hrs: [number | null, number | null][] = [
+        [m.hoursToSunset, r.hours_to_sunset], [m.hoursToSunrise, r.hours_to_sunrise],
+        [m.hoursToEarthset, r.hours_to_earthset], [m.hoursToEarthrise, r.hours_to_earthrise],
+        [m.longestDarkHours, r.longest_dark_h], [m.dteHours, r.dte_hours], [m.longestNoEarthHours, r.longest_no_earth_h],
+      ];
+      for (const [a, b] of hrs) b === null ? expect(a, c.site).toBeNull() : expect(Math.abs(a! - b), c.site).toBeLessThanOrEqual(1);
+      expect(Math.abs(m.pctLit / 100 - r.pct_lit), c.site).toBeLessThan(0.01);
+      const u = monteCarlo(s, h);
+      const std = u.std.pctLit / 100;
+      if (c.pct_lit_std < 1e-4) expect(std, c.site).toBeLessThan(1e-3);
+      else { expect(std / c.pct_lit_std, `${c.site} MC std ratio`).toBeLessThan(1.5); expect(c.pct_lit_std / std, `${c.site} MC std ratio`).toBeLessThan(1.5); }
+    }
+  });
+});
+
 describe('real site sanity', () => {
   it('connecting ridge: horizon, series, metrics, MC in range', async () => {
     const dem = await Dem.open((f) => buf('dem/' + f));

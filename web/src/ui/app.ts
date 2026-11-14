@@ -246,7 +246,7 @@ function setIdx(v: number) {
 let lastFrame = 0;
 function tick(now: number) {
   if (!playing) return;
-  if (lastFrame) setIdx((idx + ((now - lastFrame) / PLAY_MS) * STEPS) % (STEPS + 1));
+  if (lastFrame) setIdx((idx + ((now - lastFrame) / PLAY_MS) * STEPS) % STEPS);
   lastFrame = now;
   requestAnimationFrame(tick);
 }
@@ -267,7 +267,7 @@ export async function start(root: HTMLElement) {
     <div class="bar">
       <div class="row">
         <button id="play" aria-label="Play">▶</button>
-        <input id="scrub" type="range" min="0" max="${STEPS}" value="0" aria-label="Time after landing">
+        <input id="scrub" type="range" min="0" max="${STEPS - 1}" value="0" aria-label="Time after landing">
         <span id="scrubv" class="val">landing + 0 h</span>
       </div>
       <div class="row">
