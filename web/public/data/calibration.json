@@ -1,0 +1,36 @@
+{
+ "site": {
+  "lat": -89.474,
+  "lon": -137.414,
+  "mast": 2.0
+ },
+ "clones": 30,
+ "clone_ids": [
+  31,
+  60
+ ],
+ "note": "model constants were tuned on clones 1-30; these numbers are from held-out clones",
+ "window_half_m": 1500.0,
+ "source": "NASA PGDA product 78 (Barker et al. 2021), Site01 5 m DEM and Monte-Carlo clones",
+ "dem_5m_minus_20m_rms_m": 0.4,
+ "toterr_median_m": 0.37,
+ "azimuths_set_in_window": 242,
+ "horizon_sigma_deg": {
+  "clones_median": 0.0517,
+  "model_median": 0.0462,
+  "ratio_clones_over_model": 0.96
+ },
+ "horizon_5m_vs_20m_deg": {
+  "mean": 0.0096,
+  "rms": 0.0227,
+  "max_abs": 0.159
+ },
+ "pct_lit_year": {
+  "shipped_20m": 0.8646,
+  "with_5m_detail": 0.8636,
+  "clones_mean": 0.8609,
+  "clones_std": 0.0024,
+  "model_mc_mean": 0.8646,
+  "model_mc_std": 0.0016
+ }
+}
