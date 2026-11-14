@@ -1,0 +1,1 @@
+{"t0": "1969-07-01T00:00:00Z", "step_s": 3600, "n": 30721, "frame": "MOON_ME", "abcorr": "LT+S", "kernels": ["naif0012.tls", "pck00011.tpc", "moon_de440_250416.tf", "moon_pa_de440_200625.bpc", "de440s.bsp"]}

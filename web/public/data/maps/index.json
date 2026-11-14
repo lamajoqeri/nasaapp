@@ -1,0 +1,66 @@
+[
+ {
+  "id": "sp_hillshade",
+  "file": "sp_hillshade.png",
+  "proj": "spstere",
+  "kind": "hillshade",
+  "bounds": [
+   -304000.0,
+   -303920.0,
+   303920.0,
+   304000.0
+  ]
+ },
+ {
+  "id": "shackleton_hillshade",
+  "file": "shackleton_hillshade.png",
+  "proj": "spstere",
+  "kind": "hillshade",
+  "bounds": [
+   -30000.0,
+   -30000.0,
+   10000.0,
+   10000.0
+  ]
+ },
+ {
+  "id": "sp_sun",
+  "file": "sp_sun.png",
+  "proj": "spstere",
+  "kind": "avg_sun_visibility",
+  "scale": "0..255 = 0..100% of time",
+  "source": "NASA PGDA product 69, Mazarico et al. 2011",
+  "bounds": [
+   -151740.0,
+   -151740.0,
+   151740.0,
+   151740.0
+  ]
+ },
+ {
+  "id": "sp_earth",
+  "file": "sp_earth.png",
+  "proj": "spstere",
+  "kind": "avg_earth_visibility",
+  "scale": "0..255 = 0..100% of time",
+  "source": "NASA PGDA product 69, Mazarico et al. 2011",
+  "bounds": [
+   -151740.0,
+   -151740.0,
+   151740.0,
+   151740.0
+  ]
+ },
+ {
+  "id": "global_hillshade",
+  "file": "global_hillshade.jpg",
+  "proj": "eqc",
+  "kind": "hillshade",
+  "bounds_deg": {
+   "lon_min": 0,
+   "lon_max": 360,
+   "lat_min": -90,
+   "lat_max": 90
+  }
+ }
+]

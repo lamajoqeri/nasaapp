@@ -21,17 +21,23 @@ def vectors(et):
     return np.hstack([np.array(sp.spkpos(b, et, "MOON_ME", "LT+S", "MOON")[0]) for b in ("SUN", "EARTH")])
 
 
-if __name__ == "__main__":
-    load()
-    et0, et1 = sp.str2et(T0), sp.str2et(T1)
-    # ponytail: uniform ET == uniform UTC only while no leap second is added (none since 2017); 1 s = 0.0001 deg if one is
+def write(name, t0, t1):
+    et0, et1 = sp.str2et(t0), sp.str2et(t1)
+    # ponytail: uniform ET == uniform UTC only inside a span with no leap second. True for 2024-2040 so far
+    # (none since 2017). The Apollo block spans 1972's two leap seconds: up to 2 s = 0.0003 deg, ignored.
     et = et0 + np.arange(0, et1 - et0 + 1, STEP)
     v = vectors(et).astype("<f4")
     out = ROOT / "web/public/data"
     out.mkdir(parents=True, exist_ok=True)
-    v.tofile(out / "ephem.bin")
-    (out / "ephem.json").write_text(json.dumps(
-        {"t0": T0 + "Z", "step_s": STEP, "n": len(et), "frame": "MOON_ME", "abcorr": "LT+S", "kernels": KERNELS}))
+    v.tofile(out / f"{name}.bin")
+    (out / f"{name}.json").write_text(json.dumps(
+        {"t0": t0 + "Z", "step_s": STEP, "n": len(et), "frame": "MOON_ME", "abcorr": "LT+S", "kernels": KERNELS}))
     sub = np.degrees(np.arcsin(v[:, 2] / np.linalg.norm(v[:, :3], axis=1)))
     assert abs(sub).max() < 1.6, sub  # sub-solar latitude bounded by lunar obliquity (1.54 deg)
-    print(f"{len(et)} steps, {v.nbytes / 1e6:.1f} MB, sub-solar lat range {sub.min():.3f}..{sub.max():.3f} deg")
+    print(f"{name}: {len(et)} steps, {v.nbytes / 1e6:.1f} MB, sub-solar lat range {sub.min():.3f}..{sub.max():.3f} deg")
+
+
+if __name__ == "__main__":
+    load()
+    write("ephem", T0, T1)
+    write("ephem_apollo", "1969-07-01T00:00:00", "1973-01-01T00:00:00")  # optional table for the Apollo landings
