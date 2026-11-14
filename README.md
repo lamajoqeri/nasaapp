@@ -1,1 +1,114 @@
-# nasaapp
+# Shackleton Live
+
+**Compare lunar landing sites and dates in seconds.** Pick a site and a date and see where the Sun and Earth sit relative to the real terrain horizon, how long until sunset and Earthset, how much power and direct-to-Earth communication the site gets, and what happens when the landing slips by a few weeks.
+
+Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
+
+- Runs entirely in the browser. No backend, no account, works on a phone.
+- Any coordinate on the Moon. 20 m terrain at the south pole's candidate regions, coarser terrain elsewhere.
+- Every number is checked against NASA sources, and the checks are in this repo.
+
+## How it works
+
+```
+offline (Python, prep/)                         browser (TypeScript, web/)
+LOLA elevation models  -> terrain tiles    ->   horizon from the site in 720 directions, out to 300 km
+JPL DE440 ephemeris    -> Sun/Earth table  ->   Sun and Earth azimuth/elevation at any time, 2024-2040
+LRO photos, NASA maps  -> validation files ->   visible Sun fraction, Earth visibility, timelines, comparisons
+```
+
+1. **Terrain horizon.** From the site (plus mast height) we walk outward along 720 azimuths, sampling the elevation model, and keep the highest terrain angle in each direction. Geometry is done in 3D Moon-fixed coordinates, so lunar curvature and the "which way is north at the pole" problem are handled exactly.
+2. **Sun and Earth.** Positions come from a table computed with NAIF SPICE (DE440, lunar mean-Earth frame). The site's own position is subtracted, which matters for Earth (0.26 deg of parallax).
+3. **Power and comms.** The Sun is a disk, not a point: we report the visible fraction of the disk above the terrain. Earth counts as visible when its centre clears the terrain. Deep Space Network station visibility is layered on top.
+4. **Uncertainty.** The elevation model has errors. We perturb the horizon accordingly and report a spread on the results. The size and correlation of the perturbation are calibrated against NASA's own Monte-Carlo terrain realisations.
+
+`CONTRACT.md` is the exact specification (frames, formulas, file formats). `prep/geom.py` is the reference implementation that the web app mirrors.
+
+## How do we know it is right
+
+All of this is reproducible with the scripts in `prep/`; results are stored in `web/public/data/`.
+
+| Check | Result | Script |
+|---|---|---|
+| Sun and Earth direction vs JPL Horizons, 5 sites x 20 dates | max error 0.00002 deg (Sun), 0.00012 deg (Earth) | `validate.py` |
+| Fast horizon search vs brute-force 10 m search | misses at most 0.04 deg | `validate.py` |
+| Fraction of time Sun / Earth visible vs NASA PGDA maps (Mazarico et al. 2011), 300 random points near Shackleton | mean error 1.5% (Sun, r = 0.96), 0.9% (Earth, r = 0.99) | `validate.py` |
+| Sun elevation at the Apollo 11 touchdown | 10.70 deg (historical value 10.8 deg) | `checks.py` |
+| Predicted shadows vs real LRO NAC photos | see below | `bench.py` |
+| Uncertainty model vs 30 NASA Monte-Carlo terrain realisations | horizon spread and yearly-illumination spread matched after calibration (`calibration.json`) | `calib.py` |
+
+### Shadows against real photos
+
+We predict the shadow map at the moment each LRO Narrow Angle Camera photo was taken and compare it with the photo (shadow intersection-over-union, IoU).
+
+| Model | 2 photos with known capture time | 13 photos, capture time identified by best match |
+|---|---|---|
+| Smooth sphere (no terrain) | 0.00 | 0.00 |
+| 240 m terrain only | 0.51 | 0.89 |
+| Local slope only, no cast shadows | 0.60 | 0.79 |
+| **This project: 20 m terrain + far field to 300 km** | **0.70** | **0.96** |
+
+Read these with their limits:
+- All photos are from 22 Sep to 11 Oct 2010 near Shackleton crater: one season, three Sun directions.
+- For the 2 known-time photos, the product uses the same pixel value for "no data" and "deep shadow". We had to assume the large dark area on the southern edge is shadow. That set is mostly sunlit ground with small shadows, which is why its scores are lower.
+- For the other 13, the archive does not record which of 7-8 listed observations each photo came from. We picked the best-matching one for every model separately. The date is unambiguous (candidate dates differ by more than 100 deg of Sun direction); within a date the choice can flatter a score slightly.
+- Comparing illumination models with LRO photos is established practice (Mazarico et al. 2011, De Rosa et al. 2012, Gläser et al. 2014). This is our check of our own model, not a new benchmark.
+
+## Known limits
+
+- 20 m terrain exists for five south-pole regions (Shackleton / Connecting Ridge, Mons Mouton / Nobile, Malapert, Haworth, de Gerlache). The rest of 80S-90S uses 240 m terrain, and the rest of the Moon about 3.8 km, so horizons there are smoother than reality.
+- At the pole, results change over tens of meters. Moving a site 100 m can change Earth visibility from 0% to 50% of the time. A coordinate typed to two decimals is not a landing site.
+- Earth visibility uses Earth's centre. NASA's published maps count any part of Earth's disk (0.95 deg radius), so their percentages are higher.
+- The uncertainty bands cover elevation-model error near the site only. They are a lower bound.
+- The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
+- Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
+
+## Run it
+
+Web app (needs Node 20+):
+
+```
+cd web
+npm install
+npm run dev      # local dev server
+npm test         # core tests against the fixtures
+npm run build    # static site in web/dist
+```
+
+Everything the app needs is already in `web/public/data/`. To rebuild the data from the original NASA files (needs [uv](https://docs.astral.sh/uv/), about 350 MB of downloads):
+
+```
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python numpy scipy spiceypy rasterio scikit-image pillow requests
+sh prep/download.sh                 # SPICE kernels, LOLA DEMs, PGDA maps
+.venv/bin/python prep/ephem.py      # Sun/Earth tables
+.venv/bin/python prep/dem.py        # terrain tiles (reads 20 m windows over HTTP)
+.venv/bin/python prep/dsn.py        # Deep Space Network visibility
+.venv/bin/python prep/maps.py       # base maps
+.venv/bin/python prep/fixture.py    # synthetic test fixture
+.venv/bin/python prep/checks.py     # 10 s regression checks
+.venv/bin/python prep/validate.py   # Horizons + PGDA validation (3 min)
+.venv/bin/python prep/calib.py      # uncertainty calibration (5 min, network)
+.venv/bin/python prep/bench.py      # LRO photo comparison (15 min; photos listed in the script)
+```
+
+## Data and credits
+
+| Data | Used for | Source |
+|---|---|---|
+| LOLA south pole elevation models, 20 m and 80 m, with error maps (Barker et al. 2023) | Terrain, uncertainty | NASA GSFC PGDA, product 90: https://pgda.gsfc.nasa.gov/products/90 |
+| LOLA 5 m site models and Monte-Carlo realisations (Barker et al. 2021) | Uncertainty calibration | NASA GSFC PGDA, product 78: https://pgda.gsfc.nasa.gov/products/78 |
+| LOLA global elevation model LDEM_16 | Terrain outside the south pole | NASA PDS Geosciences Node: https://pds-geosciences.wustl.edu/missions/lro/lola.htm |
+| Average illumination and Earth visibility maps (Mazarico et al. 2011) | Validation, site suggestions, map overlays | NASA GSFC PGDA, product 69: https://pgda.gsfc.nasa.gov/products/69 |
+| LROC NAC DTM orthoimages (SHACKRDGE02, ESALL_CR1, ESALL_SR12) | Shadow comparison | NASA/GSFC/Arizona State University, LROC PDS archive: https://data.lroc.im-ldi.com/ |
+| DE440 ephemeris, lunar orientation and frame kernels | Sun and Earth positions | NASA JPL NAIF: https://naif.jpl.nasa.gov/naif/data.html |
+| JPL Horizons | Validation of Sun and Earth directions | NASA JPL SSD: https://ssd.jpl.nasa.gov/horizons/ |
+| PDS Geosciences Orbital Data Explorer | Finding the orthoimages | https://ode.rsl.wustl.edu/moon/ |
+
+Site coordinates: Apollo and robotic landers from NASA/LROC and public mission records; Artemis-type south-pole sites are the best-lit point within 3 km of each region's PGDA study tile, not official landing coordinates.
+
+NASA does not endorse this project.
+
+## Use of AI
+
+This project was built with AI coding assistance (Claude, via Claude Code) for planning, code and documentation. All numerical results above come from running the scripts in this repository against the listed NASA data.

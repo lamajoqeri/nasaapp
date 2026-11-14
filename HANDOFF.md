@@ -169,7 +169,7 @@ Honest wording for validation: "Validated against time-stamped LRO NAC scenes an
 - `web/public/data/dsn.bin` — Uint8 per ephem step, bits = Goldstone / Madrid / Canberra can see the Moon above 10 deg. `commsWindow = earthVisible && dsn != 0`.
 - Not done by A: calibration of the uncertainty sigma against photos (two images are too few to calibrate on). Use the manifest `sigma_h` values as-is and label the bands "terrain-model uncertainty (LOLA error map)".
 
-## Update Sat ~14:30 PST — more from Account A (schemas in CONTRACT.md, bottom sections)
+## Update Sat 13:15 PST — more from Account A (schemas in CONTRACT.md, bottom sections)
 
 **One change you must mirror in the TS core:** uncertainty smoothing is now a **45 deg** boxcar (90 azimuth bins), not 5 deg, and the 20 m tiles' `sigma_h` in the manifest went from ~0.19 to ~0.29 m. Both were calibrated against NASA's own Monte-Carlo DEM realisations (`calibration.json`). If you already ported the 5 deg version, change the one constant; `sigma_h` is read from the manifest so it needs nothing.
 
