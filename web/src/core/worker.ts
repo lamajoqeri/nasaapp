@@ -15,12 +15,13 @@ const get = async (p: string) => {
 
 let ready: Promise<{ dem: Dem; eph: Ephem }> | null = null;
 const init = () => (ready ??= (async () => {
-  const [dem, meta, bin] = await Promise.all([
+  const [dem, meta, bin, dsn] = await Promise.all([
     Dem.open((f) => get('dem/' + f)),
     get('ephem.json').then((b) => JSON.parse(new TextDecoder().decode(b))),
     get('ephem.bin'),
+    get('dsn.bin'),
   ]);
-  return { dem, eph: new Ephem(meta, bin) };
+  return { dem, eph: new Ephem(meta, bin, dsn) };
 })().catch((e) => { ready = null; throw e; }));
 
 // ponytail: unbounded cache, fine for a session's handful of sites; LRU if people script hundreds

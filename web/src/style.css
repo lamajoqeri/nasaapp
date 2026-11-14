@@ -30,6 +30,10 @@ input[type=datetime-local] { min-width: 0; width: 100%; }
 .ctl label.grow { flex: 3; }
 .ctl .site { flex: 1; min-width: 0; font-weight: 600; }
 .ctl .rm { flex: none; width: 32px; }
+.ctl.nudge { align-items: center; font-size: 12px; color: var(--muted); }
+.ctl.nudge button { width: 32px; padding: 0; }
+.moved { font-size: 12px; color: var(--accent); margin: 0 0 6px; }
+.moved[hidden] { display: none; }
 .ctl input { width: 100%; }
 
 .note { font-size: 12px; color: var(--muted); margin: 4px 0; }
