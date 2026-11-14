@@ -3,6 +3,7 @@ import { drawPanorama } from './panorama';
 import { drawStrip, stripSummary, stripTimeAt } from './strips';
 import { caption, compass, DAY, delta, dur, isoMin, rows, stations, utc } from './format';
 import { offset } from '../core/geom';
+import { mountProof } from './proof';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
 /** One scenario column. `site` is a sites.json id or 'custom'. */
@@ -322,12 +323,14 @@ export async function start(root: HTMLElement) {
     <p id="err" class="status err"></p>
     <main id="cols"></main>
     <div class="actions"><button id="add">+ Add scenario</button></div>
+    <div id="proof"></div>
     <footer>
-      Metrics cover the 29.5-day window from the landing date. “±” is the 1σ spread from a horizon Monte Carlo over terrain uncertainty.
+      Metrics cover the 29.5-day window from the landing date. “±” is how much a number moves when the terrain is varied within its measurement error (a lower bound; see “What am I looking at?”).
       Ephemeris covers 2024–2040: historical landings (Apollo, Chang'e 3–5, Chandrayaan-3) show their site at the date you pick.
       Deltas compare the delayed landing to the planned one, and a nudged site to the original: <span class="good">better</span> / <span class="bad">worse</span>.
       Comms (DSN) = Earth above the terrain and a Deep Space Network dish (Goldstone, Madrid, Canberra) seeing the Moon above 10°.
     </footer>`;
+  mountProof($('#proof'));
   try {
     const [list, r] = await Promise.all([
       fetch(import.meta.env.BASE_URL + 'data/sites.json').then((x) => { if (!x.ok) throw new Error(`sites.json: HTTP ${x.status}`); return x.json(); }),
