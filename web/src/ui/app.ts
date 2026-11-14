@@ -45,7 +45,7 @@ class Col {
       <p class="cap"></p>
       <p class="now"></p>
       <table class="m"></table>
-      <div class="striphead"><span>Next 365 days <small>(tap to set landing)</small></span><span class="ysum"></span></div>
+      <div class="striphead"><span>Year view <small>(tap to set landing)</small></span><span class="ysum"></span></div>
       <canvas class="strip"></canvas>`;
     const sel = $<HTMLSelectElement>('.site', this.el);
     const groups = new Map<string, HTMLOptGroupElement>();
@@ -111,8 +111,8 @@ class Col {
     if (rec?.date) {
       const t = Date.parse(rec.date + 'T00:00:00Z');
       note += t < range.t0
-        ? ` Landed ${rec.date}, before our 2024–2040 ephemeris: shown at the date you pick.`
-        : ` Landed ${rec.date}. <button class="link" data-t="${t}">Use landing date</button>`;
+        ? ` Landed ${esc(rec.date)}, before our 2024–2040 ephemeris: shown at the date you pick.`
+        : ` Landed ${esc(rec.date)}. <button class="link" data-t="${t}">Use landing date</button>`;
     }
     $('.note', this.el).innerHTML = note;
   }
@@ -126,7 +126,7 @@ class Col {
     this.status('Computing horizon… the first polar site downloads ~20 MB of terrain.', 'busy');
     const s = this.site(), t = this.spec.t;
     try {
-      const [b, st] = await Promise.all([core.scenario(s, t), core.strip(s, t, t + 365 * DAY)]);
+      const [b, st] = await Promise.all([core.scenario(s, t), core.strip(s, Math.min(t, range.t1 - 365 * DAY), Math.min(t, range.t1 - 365 * DAY) + 365 * DAY)]);
       if (tok !== this.token) return;
       this.base = b; this.strip = st; this.slipped = undefined;
       this.status('');
@@ -140,12 +140,13 @@ class Col {
 
   async computeSlip() {
     const tok = ++this.slipToken;
+    if ($('.status', this.el).classList.contains('slip')) this.status('');
     if (!slip || !this.base) { this.slipped = undefined; return this.render(); }
     try {
       const r = await core.scenario(this.site(), this.spec.t + slip * DAY, { mc: false });
       if (tok === this.slipToken) { this.slipped = r; this.render(); }
     } catch (e) {
-      if (tok === this.slipToken) this.status(`Slip: ${(e as Error).message}`, 'err');
+      if (tok === this.slipToken) this.status(`Slip: ${(e as Error).message}`, 'err slip');
     }
   }
 
@@ -155,9 +156,10 @@ class Col {
     $('.cap', this.el).textContent = caption(b.metrics);
     const br = rows(b.metrics, b.uncertainty);
     const sr = slip && this.slipped ? rows(this.slipped.metrics, null) : null;
+    const cmp = sr && rows(b.metrics, null); // slip has no MC: compare deterministic to deterministic
     const head = `<tr><th></th><th>At landing</th>${slip ? `<th>Delayed ${slip} d</th>` : ''}</tr>`;
     $('.m', this.el).innerHTML = head + br.map((r, i) => {
-      const d = sr ? delta(r, sr[i]) : null;
+      const d = sr && cmp ? delta(cmp[i], sr[i]) : null;
       const cell = slip ? `<td class="d ${d?.cls ?? 'pending'}">${d ? esc(d.text) : '…'}</td>` : '';
       return `<tr><th>${r.label}</th><td>${esc(r.text)}<small>${esc(r.sd)}</small></td>${cell}</tr>`;
     }).join('');
@@ -218,7 +220,7 @@ function loadHash(): Spec[] {
     const rec = sites.find((s) => s.id === key);
     const [lat, lon] = rec ? [rec.lat, rec.lon] : (key ?? '').split(',').map(Number);
     const t = Date.parse((d ?? '') + 'Z');
-    if (!(Math.abs(lat) <= 90) || !Number.isFinite(lon)) continue;
+    if (!(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 360)) continue;
     specs.push({
       site: rec ? rec.id : 'custom', lat, lon,
       t: clampT(Number.isNaN(t) ? DEFAULT_T : t),
