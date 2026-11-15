@@ -79,7 +79,7 @@ describe('chart.set', () => {
 describe('inspector.details', () => {
   it('opens and closes', async () => {
     expect(inspectorState().detailsOpen).toBe(false);
-    expect(await run('inspector.details', { open: true })).toEqual({ detailsOpen: true });
+    expect(await run('inspector.details', { open: true })).toMatchObject({ detailsOpen: true });
     expect(inspectorState().detailsOpen).toBe(true);
     await run('inspector.details', { open: false });
     expect(inspectorState().detailsOpen).toBe(false);

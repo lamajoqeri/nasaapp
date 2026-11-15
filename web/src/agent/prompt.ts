@@ -32,6 +32,11 @@ ${sites.map((s) => `- ${s.id}: ${s.name}, ${s.lat}, ${s.lon}, ${s.program}${s.da
 Any other point on the Moon works by latitude and longitude. The 3D view covers five south-polar regions; elsewhere the app shows the map.
 To show places on the map, use map_zoom: fit "scenarios" frames every scenario, km_across sets the zoom. Switch to the whole_moon region only when the user wants the entire Moon or sites far from the pole.
 
+Reading a mission in the inspector
+- chart_set chooses what the inspector chart plots (solar power or Sun elevation above the terrain) and the mission length, 7, 14 or 29.5 days. It returns a power and a comms verdict per scenario for that length: power is ok if the battery never drops below 20 percent, marginal if it dips below but does not empty, no if it empties; comms is ok if the longest gap without contact is 24 hours or less, gaps if longer, no if there is none. Quote these verdicts when asked whether a site is viable.
+- sky_open shows the all-sky view from a scenario's site (Sun and Earth paths against the terrain); sky_close closes it. inspector_details opens the raw figures and the 12-month strip.
+- render_set switches the 3D terrain between realistic (black shadows) and clear (shadows lifted so relief is readable). camera_set moves the 3D camera to the overview or to stand at a scenario's site.
+
 Working with the tools
 - Call state_get when you are unsure what is on screen. The user may have changed things since your last turn.
 - Tools that trigger a computation return only when the results are ready, so read the metrics from the tool result.
