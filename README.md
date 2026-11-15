@@ -11,7 +11,7 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 ## What is in the app
 
 - **3D terrain stage.** Five south-pole regions rendered in real 3D from 20 m LOLA terrain, with shadows traced toward the Sun through the terrain out to 300 km. Press play and the shadows sweep across a lunar day. Two render modes: Realistic (black shadows) and Clear (shadows lifted so relief stays readable). "Stand at site" puts the camera on the mast with the Sun and Earth on the real horizon. Click the terrain to place a site.
-- **Scenarios.** Up to four site-and-date combinations, A to D: any catalogue site (Artemis candidate regions, flown and planned CLPS landers, Chandrayaan-3, SLIM, Chang'e 3 to 6, Apollo 11 to 17) or any coordinate, picked from a list, typed, clicked on the map or the 3D terrain, or nudged 50 to 500 m at a time.
+- **Scenarios.** Up to four site-and-date combinations, A to D: any catalogue site (Artemis candidate regions, flown and planned CLPS landers, Chandrayaan-3, SLIM, Chang'e 3 to 6, Apollo 11 to 17) or any coordinate, picked from a list, typed, or clicked on the map or the 3D terrain.
 - **Assistant.** A chat panel where Claude operates the app through the same controls a person uses: it can add and move scenarios, change dates, set a schedule slip, open the comparison and read the results back. On Vercel it uses the site owner's key through a small function; elsewhere it needs the user's own Anthropic API key, kept only in the browser. Everything else works without it.
 - **Timeline.** One lane per scenario on a shared 29.5-day axis: sunlight above, Earth visibility below. A schedule slip of up to 60 days recomputes every scenario for the later date and draws it as a ghost lane.
 - **Inspector.** Horizon panorama (terrain silhouette with Sun and Earth tracks); a chart of solar power or Sun elevation above the terrain for every scenario; a windows bar showing when each site is sunlit, has Earth in view, and has Deep Space Network contact; a Power and a Comms verdict with the thresholds stated; and the raw figures (time to sunset and Earthset, sunlit share, longest darkness, battery survival) behind a Details button.
@@ -36,7 +36,7 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 | Animation over a lunar day | Play button drives shadows, panorama, sky view and playhead together |
 | Mission planners, educators and the public | Numbers with uncertainty and validation for planners; plain-language explainer, status sentences and the assistant for everyone else |
 | Real topography, no atmosphere, libration | LOLA terrain horizon with exact curvature and no refraction; Earth's libration comes from the JPL lunar orientation model |
-| Why small location or date changes matter | 100 m nudge buttons and the slip slider show it directly |
+| Why small location or date changes matter | Moving the pin and the slip slider show it directly |
 
 ### Resources named in the challenge
 

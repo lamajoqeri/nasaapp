@@ -50,7 +50,7 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .bad { color: var(--bad); }
 .same, .pending { color: var(--faint); }
 
-/* segmented control: shared by the stage switch, the nudge distance and (via their own css) the map and 3D chrome */
+/* segmented control: shared by the stage switch and (via their own css) the map and 3D chrome */
 .seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
 .seg button { height: 24px; padding: 0 9px; border: 0; border-radius: 2px; font-size: 12px; color: var(--muted); }
 .seg button:hover { color: var(--fg); }
@@ -141,22 +141,12 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .card-ctl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .card-ctl > :first-child { margin-top: 12px; }
 .f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.f > span, .nudge .lbl { font-size: 10.5px; line-height: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+.f > span { font-size: 10.5px; line-height: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
 .f.pos { flex-direction: row; justify-content: space-between; align-items: baseline; }
 .f.pos .coord { color: var(--fg); }
 .f2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .f2.when-row { grid-template-columns: minmax(0, 1fr) 76px; }
 .f input { width: 100%; }
-.nudge { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; align-items: center; }
-.nudge .lbl { grid-column: 1 / -1; }
-.pad { display: grid; grid-template: repeat(3, 24px) / repeat(3, 24px); gap: 2px; }
-.pad button { width: 24px; height: 24px; padding: 0; font: 600 10.5px/1 var(--mono); color: var(--muted); }
-.pad button:hover { color: var(--fg); }
-.pad [data-nudge=n] { grid-area: 1 / 2; } .pad [data-nudge=w] { grid-area: 2 / 1; }
-.pad [data-nudge=e] { grid-area: 2 / 3; } .pad [data-nudge=s] { grid-area: 3 / 2; }
-.pad i { grid-area: 2 / 2; place-self: center; width: 4px; height: 4px; border-radius: 50%; background: var(--fg); }
-.steps { justify-self: start; }
-.steps button { font-family: var(--mono); font-size: 11.5px; padding: 0 6px; word-spacing: -0.3em; }
 .note { font-size: 12px; color: var(--muted); padding-bottom: 2px; text-wrap: pretty; }
 
 /* ---- rail: agent panel ---- */
@@ -307,8 +297,6 @@ table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
   .insp-body { overflow: visible; }
   .thread { max-height: 60vh; }
   .ask textarea { font-size: 16px; } /* below 16px iOS zooms the page on focus */
-  .pad button { width: 32px; height: 32px; }
-  .pad { grid-template: repeat(3, 32px) / repeat(3, 32px); }
   .seg button { height: 32px; min-width: 32px; }
   input[type=range] { height: 32px; }
   .lane-badges .badge { width: 32px; height: 32px; margin: 0 auto 10px; }
