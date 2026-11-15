@@ -14,7 +14,7 @@ import { mountSky, readHash as readSkyHash, skyState, writeHash as writeSkyHash 
 import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools, utcTime } from './actions';
 import { mountAgent } from '../agent/panel';
 import type { View3DHandle } from '../view3d';
-import { regionAt, type RegionTile } from '../view3d/regions';
+import { inSurround, regionAt, type RegionTile } from '../view3d/regions';
 import { onView3dChange, view3dState } from '../view3d/actions'; // registers render.set / camera.set
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
@@ -432,7 +432,9 @@ function paintNote() {
     ? '3D terrain covers Shackleton, de Gerlache Rim, Haworth, Malapert Massif and Mons Mouton / Nobile Rim. Showing the map for this site.'
     : err3d ? `${err3d} Showing the map. Click it to place scenario ${LETTERS[sel]}.` : `Click the map to place scenario ${LETTERS[sel]}.`;
   else if (err3d) text = err3d;
-  else if (!inside) text = `Scenario ${LETTERS[sel]} is outside the 3D regions, so it has no pin here. The lighting is for its date.`;
+  else if (!inside) text = demTiles && inSurround(demTiles, sc.spec.lat, sc.spec.lon)
+    ? `Scenario ${LETTERS[sel]} is outside the five 20 m regions, so 3D shows it on the coarser 240 m terrain.`
+    : `Scenario ${LETTERS[sel]} is outside the 3D regions, so it has no pin here. The lighting is for its date.`;
   else if (rangeOf(sc.spec.t) !== ranges[0]) text = '3D lighting covers 2024 to 2040, so it cannot show this date.';
   n.textContent = text;
   n.classList.toggle('err', !flash && !!err3d);
@@ -477,7 +479,8 @@ function showStage() {
     import('../view3d').then(({ mount3D }) => {
       view3d = mount3D($('#s3d'), {
         dataBase, startZoom: 0.62, region: regionOf(cur().spec.lat, cur().spec.lon),
-        onPick: (lat, lon) => { if (cur()) ui('scenario.update', { id: LETTERS[sel], lat, lon }); },
+        // A point picked in 3D stays in 3D, on the 240 m surround if no 20 m region covers it (no fallback to the map).
+        onPick: (lat, lon) => { if (cur()) { forced3d = !inTile(lat, lon); ui('scenario.update', { id: LETTERS[sel], lat, lon }); } },
         onReady: () => { stage.classList.remove('loading'); syncStage(); },
         onError: (msg) => { // e.g. no WebGL2: the module shows its message; the map works without it
           stage.classList.remove('loading');

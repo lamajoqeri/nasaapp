@@ -8,7 +8,7 @@ import type { Series } from '../core/series';
 import { azel, DEG, enu, R, spFwd, spInv, unit, type V3 } from '../core/geom';
 import { demMax, EARTH_RADIUS_DEG, SUN_RADIUS_DEG, sunFractionAt } from './march';
 import { BLOCK_HI, BLOCK_LO, BLOCK_MID, DEPTH_FRAG, GBUF_FRAG, PROBE_FRAG, RESOLVE_FRAG, SCREEN_VERT, TERRAIN_FRAG, TERRAIN_VERT, DETAIL, LITMAP_FRAG, EARTH_FRAG, GLARE_FRAG, SKY_VERT } from './shaders';
-import { regionTiles } from './regions';
+import { LO_ID, regionAt, regionTiles } from './regions';
 import { run } from '../ui/actions';
 import { bindView3D, wantedRenderMode, type CameraState, type RenderMode } from './actions';
 import './view3d.css';
@@ -36,7 +36,8 @@ export interface View3DHandle {
   renderMode(): RenderMode;
   /** Camera as shown: preset and, when standing at a site, that scenario's label. */
   cameraState(): CameraState;
-  /** The sites passed to setSites, in order, and whether each lies in the region shown. */
+  /** The sites passed to setSites, in order, and whether the camera can stand there in the region shown
+   *  (inside its 20 m tile, or on the 240 m surround where no 20 m region covers the point). */
   siteStates(): { label: string; inRegion: boolean }[];
 }
 export interface View3DOptions {
@@ -49,7 +50,7 @@ export interface View3DOptions {
   region?: string;
   /** Render mode to start in (default: the last one requested through the `render.set` action, else realistic). */
   renderMode?: RenderMode;
-  /** Overview: the user clicked (not dragged) the terrain of the shown region at this surface point. */
+  /** Overview: the user clicked (not dragged) the terrain at this surface point (20 m region or its 240 m surround). */
   onPick?(lat: number, lon: number): void;
 }
 /** Not part of the host API: self-check hooks (`(handle as View3DDebugHandle).debug`). */
@@ -81,9 +82,8 @@ export interface View3DDebugHandle extends View3DHandle {
 /** March step multiplier: 1 = the reference schedule of march.ts. Raise (e.g. 1.5, 2) on slow GPUs. */
 export const STEP_SCALE = 1;
 const MAX_PIXEL_RATIO = 1.5;
-const DEFAULT_REGION = 'shackleton_20m', LO_ID = 'sp_240m';
+const DEFAULT_REGION = 'shackleton_20m';
 const IDLE_MAX_PX = 6.5e6;    // idle frames are supersampled up to 2x per axis, within this many buffer pixels
-const PICK_INSET_M = 1000;    // clicks count this far inside the region tile (the host's own margin)
 const GLARE_RADIUS_DEG = 6;
 const MIN_ORBIT_M = 150;       // closest orbit distance: the illustrative detail still holds up there
 const MIN_ALT_M = 40;         // the overview camera stays at least this far above the terrain
@@ -590,7 +590,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     /** After a zoom-to-cursor or pan the orbit target can float off the ground: put it back on the terrain at the screen centre (same view, new pivot). */
     function snapTarget() {
       if (!reg || !controls || inSite) return;
-      const b = cv.getBoundingClientRect(), hit = terrainAt(b.left + b.width / 2, b.top + b.height / 2, 0);
+      const b = cv.getBoundingClientRect(), hit = terrainAt(b.left + b.width / 2, b.top + b.height / 2);
       if (!hit) return;
       const [lat, lon] = spInv(hit[0], hit[1]);
       const t = reg.pos(hit[0], hit[1], reg.dem.sample(lat, lon)), d = t.distanceTo(camera.position);
@@ -650,11 +650,11 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       litDirty = true;
     }
 
-    interface SiteGeo { s: View3DSite; h: number; eyeH: number; base: THREE.Vector3; up: THREE.Vector3; e: THREE.Vector3; n: THREE.Vector3; pin: THREE.Line; label: HTMLElement }
-    let siteGeo: (SiteGeo | undefined)[] = []; // host index -> geometry; undefined = outside the shown region
+    interface SiteGeo { s: View3DSite; stand: boolean; h: number; eyeH: number; base: THREE.Vector3; up: THREE.Vector3; e: THREE.Vector3; n: THREE.Vector3; pin: THREE.Line; label: HTMLElement }
+    let siteGeo: (SiteGeo | undefined)[] = []; // host index -> geometry; undefined = beyond the drawn terrain
     const pinMat = new THREE.LineBasicMaterial({ color: PIN_HEX });
     const look = { az: 0, pitch: 0, hfov: 60 };
-    const standing = () => (mode === 'site' ? siteGeo[siteIdx] : undefined);
+    const standing = () => (mode === 'site' && siteGeo[siteIdx]?.stand ? siteGeo[siteIdx] : undefined);
 
     const v6 = new Float64Array(6);
     const sunS = new THREE.Vector3(), earthS = new THREE.Vector3(); // body positions in scene coordinates (metres)
@@ -887,10 +887,12 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       siteGeo = sites.map((s) => {
         if (!(s.lat < -60)) return undefined;
         const xy = spFwd(s.lat, s.lon);
-        if (!r.inHi(xy[0], xy[1], 0)) return undefined; // other regions' scenarios get no pin here
+        const hiHere = r.inHi(xy[0], xy[1], 0);
+        const mesh = meshHeight(hiHere ? r.hiGrid : r.loGrid, xy[0], xy[1]);
+        if (mesh === -Infinity) return undefined; // beyond the drawn terrain: no pin
         const h = r.dem.sample(s.lat, s.lon);
         // Eye above whichever is higher: the DEM or the decimated mesh that is actually drawn.
-        const surf = Math.max(h, meshHeight(r.hiGrid, xy[0], xy[1]));
+        const surf = Math.max(h, mesh);
         const f = enu(s.lat, s.lon);
         const base = r.pos(xy[0], xy[1], h), up = v3(f.u);
         const pin = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), up.clone().multiplyScalar(PIN_M)]), pinMat);
@@ -899,7 +901,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
         const label = document.createElement('div');
         label.className = 'v3-label'; label.textContent = s.label;
         root.append(label);
-        return { s, h, eyeH: surf - h + Math.max(s.mast, MIN_EYE_M), base, up, e: v3(f.e), n: v3(f.n), pin, label };
+        return { s, stand: hiHere || !regionAt(regions, s.lat, s.lon), h, eyeH: surf - h + Math.max(s.mast, MIN_EYE_M), base, up, e: v3(f.e), n: v3(f.n), pin, label };
       });
       cameraChanged();
     }
@@ -939,16 +941,16 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     const logEv = (e: Event) => { evLog.push(`${e.type}:${e.isTrusted ? 'trusted' : 'synthetic'}`); if (evLog.length > 60) evLog.shift(); };
     let pinch = 0, downAt: { x: number; y: number; id: number } | undefined, hoverAt: { x: number; y: number } | undefined, hoverRaf = 0;
     const gPix = new Float32Array(4);
-    /** Stereographic (x, y) of the terrain under a client point, from the last frame's G-buffer. */
-    function terrainAt(clientX: number, clientY: number, inset = PICK_INSET_M): [number, number] | undefined {
+    /** Stereographic (x, y) of the terrain under a client point, from the last frame's G-buffer.
+     *  Any drawn terrain counts, the 240 m surround too: the host switches region if the point has its own 20 m tile. */
+    function terrainAt(clientX: number, clientY: number): [number, number] | undefined {
       if (!deferred || !reg || gTarget.width < 2) return undefined;
       const b = cv.getBoundingClientRect();
       const px = Math.floor((clientX - b.left) / b.width * gTarget.width), py = gTarget.height - 1 - Math.floor((clientY - b.top) / b.height * gTarget.height);
       if (!(px >= 0 && py >= 0 && px < gTarget.width && py < gTarget.height)) return undefined;
       renderer.readRenderTargetPixels(gTarget, px, py, 1, 1, gPix);
       if (!(gPix[3] > 0.5)) return undefined; // sky
-      const x = gPix[0] + reg.xy0[0], y = gPix[1] + reg.xy0[1]; // the G-buffer holds relative map coords
-      return reg.inHi(x, y, inset) ? [x, y] : undefined; // the coarse surround is not pickable
+      return [gPix[0] + reg.xy0[0], gPix[1] + reg.xy0[1]]; // the G-buffer holds relative map coords
     }
     const onDown = (e: PointerEvent) => {
       logEv(e);
@@ -1115,7 +1117,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
 
     const renderModeChanged = () => { shadeUniforms.uClear.value = renderMode === 'clear' ? 1 : 0; requestRender(); };
     resize();
-    return { timeChanged, sitesChanged, cameraChanged, resize, renderModeChanged, applyRegion, hasSite: (i) => !!siteGeo[i], debug };
+    return { timeChanged, sitesChanged, cameraChanged, resize, renderModeChanged, applyRegion, hasSite: (i) => !!siteGeo[i]?.stand, debug };
   }
 
   syncUi();
