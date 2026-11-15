@@ -715,6 +715,8 @@ function viewState() {
     mode,
     mapRegion,
     mapOverlay: mapRegion === 'whole_moon' ? 'terrain' : keyOf(MAP_OVERLAY, map?.state().overlay) ?? 'terrain', // no overlays there
+    mapCenter: map && mode === 'map' ? map.state().center.map((v) => +v.toFixed(4)) : null,
+    mapKmAcross: map && mode === 'map' ? Math.round(map.state().kmAcross * 10) / 10 : null,
     region3d: view3d?.region() ?? null,
     note: $('#stage-note').textContent || null,
   };
@@ -906,6 +908,32 @@ function registerActions() {
       if (region) map?.setMode(MAP_REGION[region]);
       if (a.overlay) map?.setOverlay(MAP_OVERLAY[a.overlay]);
       return { tab: tabNow(), view: viewState() };
+    },
+  });
+  register({
+    name: 'map.zoom',
+    description: `Zoom and pan the 2D map (switches the stage to the map). Use exactly one of: fit="scenarios" to frame every scenario with a margin (stays on the south-pole map when they all fit on it; the right call for "show all the points"); lat+lon and/or km_across to centre on a point and/or set how many km the view spans horizontally (south-pole map: ~0.5 to 600 km); factor to zoom relative to now (>1 zooms in, <1 out, e.g. 2 or 0.5). Prefer this over ${toolName('view.set')} region "whole_moon", which shows the entire Moon.`,
+    schema: schema({
+      fit: { type: 'string', enum: ['scenarios'], description: 'Frame all scenarios.' },
+      lat: { type: 'number', description: 'Centre latitude, degrees (needs lon).' },
+      lon: { type: 'number', description: 'Centre longitude, degrees east (needs lat).' },
+      km_across: { type: 'number', description: 'Horizontal span of the view in km.' },
+      factor: { type: 'number', description: 'Relative zoom: >1 in, <1 out.' },
+    }),
+    run: async (a: { fit?: 'scenarios'; lat?: number; lon?: number; km_across?: number; factor?: number }) => {
+      const point = a.lat != null || a.lon != null;
+      if (point && (a.lat == null || a.lon == null)) throw new Error('give both lat and lon.');
+      const kinds = [a.fit != null, point || a.km_across != null, a.factor != null].filter(Boolean).length;
+      if (kinds !== 1) throw new Error('use exactly one of: fit, lat+lon/km_across, factor.');
+      if (a.km_across != null && !(a.km_across > 0)) throw new Error('km_across must be > 0.');
+      if (a.factor != null && !(a.factor > 0)) throw new Error('factor must be > 0.');
+      if (view !== 'mission') await setView('mission');
+      if (mode !== 'map') setMode('map');
+      if (a.fit) map!.fit(scs.map((sc) => [sc.spec.lat, sc.spec.lon]));
+      else if (a.factor != null) map!.zoomBy(a.factor);
+      else map!.frame(a.lat, a.lon, a.km_across);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // let a first layout apply it
+      return { view: viewState() };
     },
   });
   register({

@@ -7,7 +7,13 @@ export interface MapSite { id: string; name: string; lat: number; lon: number; p
 export interface MapMarker { lat: number; lon: number; label: string }
 export interface MapHandle {
   setMarkers(m: MapMarker[]): void; focus(lat: number, lon: number): void; destroy(): void;
-  setMode(m: Mode): void; setOverlay(o: OverlayId): void; state(): { mode: Mode; overlay: OverlayId };
+  setMode(m: Mode): void; setOverlay(o: OverlayId): void;
+  state(): { mode: Mode; overlay: OverlayId; center: [number, number]; kmAcross: number };
+  /** Zoom and pan so every point is in view (picks the south-pole map when they all fit on it). */
+  fit(points: [number, number][]): void;
+  /** Centre on lat/lon with `kmAcross` km across the viewport's width (either may be omitted). */
+  frame(lat?: number, lon?: number, kmAcross?: number): void;
+  zoomBy(f: number): void;
 }
 
 // ---------- pure helpers (unit-tested in map.test.ts) ----------
@@ -39,6 +45,14 @@ export function clampView(v: View, b: Bounds): View {
     return (hi - lo) * v.scale <= px ? (lo + hi) / 2 : Math.min(hi - half, Math.max(lo + half, c));
   };
   return { ...v, cx: axis(v.cx, b[0], b[2], v.w), cy: axis(v.cy, b[1], b[3], v.h) };
+}
+
+/** Centre and scale that fit map points [x, y] in a w x h viewport with a margin; `minSpan` stops a lone point zooming in forever. */
+export function fitPoints(pts: [number, number][], w: number, h: number, minSpan: number): { cx: number; cy: number; scale: number } {
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sx = Math.max(x1 - x0, minSpan) * 1.4, sy = Math.max(y1 - y0, minSpan) * 1.4; // 20% margin each side
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, scale: Math.min(w / sx, h / sy) };
 }
 
 /** Change scale keeping the map point under screen point (sx, sy) fixed. */
@@ -218,7 +232,10 @@ export function mountMap(el: HTMLElement, opts: {
   let overlay: OverlayId = 'none';
   let view: View = { cx: 0, cy: 0, scale: 1, w: 0, h: 0 };
   const saved: Partial<Record<Mode, { cx: number; cy: number; scale: number }>> = {};
-  let pendingFocus: [number, number] | null = null;
+  let pending: (() => void) | null = null;  // view change requested before the first layout
+  const whenLaidOut = (f: () => void) => { if (view.w) f(); else pending = f; };
+  const KM_PER_DEG = 30.32; // lunar equator; the global map's x/y units are degrees
+  const kmPerUnit = () => (mode === 'polar' ? 1e-3 : KM_PER_DEG);
   let markers: MapMarker[] = [];
   let hoverSite: MapSite | null = null;
   let cross: [number, number] | null = null;   // map units
@@ -302,7 +319,7 @@ export function mountMap(el: HTMLElement, opts: {
     canvas.width = Math.round(r.width * dpr);
     canvas.height = Math.round(r.height * dpr);
     view = { ...view, w: r.width, h: r.height };
-    if (pendingFocus) { applyFocus(...pendingFocus); pendingFocus = null; }
+    if (pending) { const f = pending; pending = null; f(); }
     else if (first) resetView();
     else setView(atFit ? { ...view, scale: minScale() } : view);
     drawNow();
@@ -624,11 +641,27 @@ export function mountMap(el: HTMLElement, opts: {
   return {
     setMarkers(m) { markers = m.slice(); draw(); },
     setMode, setOverlay,
-    state: () => ({ mode, overlay }),
+    state: () => ({ mode, overlay, center: mapToLl(mode, view.cx, view.cy), kmAcross: view.w ? (view.w / view.scale) * kmPerUnit() : 0 }),
     focus(lat, lon) {
       setMode(lat < -80 ? 'polar' : 'global');
-      if (view.w) applyFocus(lat, lon); else pendingFocus = [lat, lon];
+      whenLaidOut(() => applyFocus(lat, lon));
     },
+    fit(points) {
+      if (!points.length) return;
+      const b = bounds.sp_hillshade ?? baseBounds();
+      const polar = points.every(([la, lo]) => la < -80 && inBounds(b, ...spFwd(la, lo)));
+      setMode(polar ? 'polar' : 'global');
+      // ponytail: global fit ignores the 0/360 seam; points either side of 0° lon fit the long way round.
+      whenLaidOut(() => setView({ ...view, ...fitPoints(points.map(([la, lo]) => llToMap(mode, la, lo)), view.w, view.h, polar ? 3000 : 2) }));
+    },
+    frame(lat, lon, km) {
+      if (lat != null && lon != null) setMode(lat < -80 ? 'polar' : 'global');
+      whenLaidOut(() => {
+        const [cx, cy] = lat != null && lon != null ? llToMap(mode, lat, lon) : [view.cx, view.cy];
+        setView({ ...view, cx, cy, scale: km ? view.w / (km / kmPerUnit()) : view.scale });
+      });
+    },
+    zoomBy: (f) => whenLaidOut(() => zoomBy(f)),
     destroy() {
       dead = true;
       ac.abort(); ro.disconnect();

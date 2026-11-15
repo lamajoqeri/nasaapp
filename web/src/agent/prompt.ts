@@ -30,6 +30,7 @@ Judging a site
 Site catalogue (id: name, latitude, longitude, programme)
 ${sites.map((s) => `- ${s.id}: ${s.name}, ${s.lat}, ${s.lon}, ${s.program}${s.date ? `, landed ${s.date}` : ''}`).join('\n')}
 Any other point on the Moon works by latitude and longitude. The 3D view covers five south-polar regions; elsewhere the app shows the map.
+To show places on the map, use map_zoom: fit "scenarios" frames every scenario, km_across sets the zoom. Switch to the whole_moon region only when the user wants the entire Moon or sites far from the pole.
 
 Working with the tools
 - Call state_get when you are unsure what is on screen. The user may have changed things since your last turn.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { spFwd } from '../core/geom';
 import {
-  clampView, detailVisible, feather, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
+  clampView, detailVisible, feather, fitPoints, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
   matchStats, niceScaleKm, rampLut, rectsOverlap, toMap, toScreen, zoomAt, type Bounds, type View,
 } from './map';
 
@@ -152,5 +152,14 @@ describe('seam blending', () => {
     expect(g * 150 + o).toBeCloseTo(120);
     expect(g * 190 + o).toBeCloseTo(140);
     expect(matchStats([100, 0], [120, 20])).toEqual([1, 20]);
+  });
+});
+
+describe('fitPoints', () => {
+  it('centres on the points with a margin, and floors the span for a lone point', () => {
+    const f = fitPoints([[0, 0], [10000, 4000]], 1000, 500, 3000);
+    expect(f.cx).toBe(5000); expect(f.cy).toBe(2000);
+    expect(f.scale).toBeCloseTo(1000 / 14000);           // width-limited: 10 km * 1.4
+    expect(fitPoints([[5, 5]], 1000, 1000, 3000).scale).toBeCloseTo(1000 / 4200);
   });
 });
