@@ -93,7 +93,7 @@ Read these with their limits:
 - The uncertainty bands cover elevation-model error near the site only, were calibrated at one site, and came out about 1.5x narrower than NASA's own terrain realisations imply on held-out data. Treat them as a lower bound. The offset between our 20 m result and the 5 m terrain (0.1-0.4% of yearly illumination here) is larger than the band itself.
 - Permanent-shadow data covers only the area poleward of about 85°S, counts regions of at least 0.1 km², and comes from NASA's 60 m long-term simulation, not from our own horizon engine. Distances are good to about 0.1 km.
 - The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
-- Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
+- Power is the visible fraction of the solar disk (terrain and Earth eclipses taken out) for a Sun-tracking panel. No thermal model, no link budget.
 - The battery model and the Deep Space Network table are simple and have unit tests only; they are not validated against an external source. The DSN table uses a 10 deg elevation mask and a simplified Earth rotation model.
 
 ## Run it

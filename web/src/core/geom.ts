@@ -2,6 +2,7 @@
 export const R = 1737400;
 export const NAZ = 720;
 export const SUN_R = 695700e3;
+export const EARTH_R = 6371e3; // mean radius, for eclipses
 export const DEG = Math.PI / 180;
 
 export type V3 = [number, number, number];

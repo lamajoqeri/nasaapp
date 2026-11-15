@@ -47,7 +47,7 @@ export function monteCarlo(s: Series, hor: Horizon, earthMargin = 0, draws = 64,
       el[i] = hor.el[i] + sum * norm * sigEl[i];
     }
     for (let i = 0; i < n; i++) {
-      sf[i] = frac(s.sunEl[i] - horizonAt(el, s.sunAz[i]), s.sunRadius[i]);
+      sf[i] = frac(s.sunEl[i] - horizonAt(el, s.sunAz[i]), s.sunRadius[i]) * (1 - s.eclipse[i]);
       ev[i] = s.earthEl[i] - horizonAt(el, s.earthAz[i]) > earthMargin ? 1 : 0;
       if (sf[i] > 0) pLit[i] += 1 / draws;
     }

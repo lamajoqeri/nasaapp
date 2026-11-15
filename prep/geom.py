@@ -7,6 +7,7 @@ import numpy as np
 R = 1737400.0
 NAZ = 720
 SUN_R = 695700e3
+EARTH_R = 6371e3  # mean radius, for eclipses
 DATA = Path(__file__).resolve().parent.parent / "web/public/data"
 
 
@@ -115,6 +116,24 @@ def sun_frac(el_sun, hor, dist_sun):
 
 # ---- time series, metrics, uncertainty (reference for web/src/core) ----
 
+def eclipse(saz, sel, eaz, eel, dist_sun, dist_earth):
+    """Share (0..1) of the Sun's disk hidden behind Earth's disk, seen from the site (small-angle circles).
+    ponytail: solid 6371 km Earth, no atmosphere (real umbra is ~2% wider); fine at hourly steps."""
+    r1 = np.degrees(np.arcsin(SUN_R / dist_sun))
+    r2 = np.degrees(np.arcsin(EARTH_R / dist_earth))
+    a1, e1, a2, e2 = (np.radians(x) for x in (saz, sel, eaz, eel))
+    d = np.degrees(np.arccos(np.clip(np.sin(e1) * np.sin(e2) + np.cos(e1) * np.cos(e2) * np.cos(a1 - a2), -1, 1)))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        dd = np.maximum(d, 1e-12)
+        lens = (r1 ** 2 * np.arccos(np.clip((dd ** 2 + r1 ** 2 - r2 ** 2) / (2 * dd * r1), -1, 1))
+                + r2 ** 2 * np.arccos(np.clip((dd ** 2 + r2 ** 2 - r1 ** 2) / (2 * dd * r2), -1, 1))
+                - 0.5 * np.sqrt(np.maximum((-dd + r1 + r2) * (dd + r1 - r2) * (dd - r1 + r2) * (dd + r1 + r2), 0)))
+    f = lens / (np.pi * r1 ** 2)
+    f = np.where(d >= r1 + r2, 0.0, f)
+    f = np.where(d <= abs(r2 - r1), np.minimum(1.0, (r2 / r1) ** 2), f)
+    return np.clip(f, 0, 1)
+
+
 def load_ephem():
     meta = json.loads((DATA / "ephem.json").read_text())
     return meta, np.fromfile(DATA / "ephem.bin", dtype="<f4").reshape(-1, 6).astype(float)
@@ -126,8 +145,9 @@ def series(dem, eph, i0, n, lat, lon, mast=2.0, margin=0.0, hor=None):
     h = float(dem.sample(lat, lon)) + mast
     v = eph[i0:i0 + n]
     saz, sel, sd = azel(lat, lon, h, v[:, :3])
-    eaz, eel, _ = azel(lat, lon, h, v[:, 3:])
-    return {"sun_az": saz, "sun_el": sel, "sun_frac": sun_frac(sel, horizon_at(el, saz), sd),
+    eaz, eel, ed = azel(lat, lon, h, v[:, 3:])
+    ecl = eclipse(saz, sel, eaz, eel, sd, ed)
+    return {"sun_az": saz, "sun_el": sel, "sun_frac": sun_frac(sel, horizon_at(el, saz), sd) * (1 - ecl), "eclipse": ecl,
             "earth_az": eaz, "earth_el": eel, "earth_visible": eel - horizon_at(el, eaz) > margin,
             "sun_dist": sd, "horizon": (el, dist, sig)}
 
@@ -181,7 +201,7 @@ def uncertainty(s, draws):
     i0 = np.floor(i).astype(int)
     f = i - i0
     hor = draws[:, i0 % naz] * (1 - f) + draws[:, (i0 + 1) % naz] * f  # (n, steps)
-    frac = sun_frac(s["sun_el"][None, :], hor, s["sun_dist"][None, :])
+    frac = sun_frac(s["sun_el"][None, :], hor, s["sun_dist"][None, :]) * (1 - s["eclipse"][None, :])
     pct = frac.mean(1)
     return {"p_lit": (frac > 0).mean(0), "pct_lit_mean": float(pct.mean()), "pct_lit_std": float(pct.std())}
 
