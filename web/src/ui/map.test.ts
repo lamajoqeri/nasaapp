@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { spFwd } from '../core/geom';
 import {
-  clampView, detailVisible, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
-  niceScaleKm, rampLut, rectsOverlap, toMap, toScreen, zoomAt, type Bounds, type View,
+  clampView, detailVisible, feather, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
+  matchStats, niceScaleKm, rampLut, rectsOverlap, toMap, toScreen, zoomAt, type Bounds, type View,
 } from './map';
 
 const SP: Bounds = [-304000, -303920, 303920, 304000];
@@ -136,5 +136,21 @@ describe('labels and furniture', () => {
     expect([...lut.slice(0, 3)]).toEqual([10, 11, 13]);
     expect([...lut.slice(765)]).toEqual([242, 181, 68]);
     expect(lut[200 * 3]).toBeGreaterThan(lut[100 * 3]);
+  });
+});
+
+describe('seam blending', () => {
+  it('feather ramps 0 -> 1 smoothly over its width', () => {
+    expect(feather(-5, 10)).toBe(0);
+    expect(feather(0, 10)).toBe(0);
+    expect(feather(5, 10)).toBeCloseTo(0.5);
+    expect(feather(10, 10)).toBe(1);
+    expect(feather(99, 10)).toBe(1);
+  });
+  it('matchStats maps one mean/std onto another', () => {
+    const [g, o] = matchStats([150, 40], [120, 20]);
+    expect(g * 150 + o).toBeCloseTo(120);
+    expect(g * 190 + o).toBeCloseTo(140);
+    expect(matchStats([100, 0], [120, 20])).toEqual([1, 20]);
   });
 });

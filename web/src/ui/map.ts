@@ -92,6 +92,27 @@ export function niceScaleKm(pxPerMetre: number, maxPx: number): number {
   return (km / p >= 5 ? 5 : km / p >= 2 ? 2 : 1) * p;
 }
 
+/** Smooth 0..1 fade: 0 at d <= 0, 1 at d >= width. */
+export function feather(d: number, width: number): number {
+  const t = Math.min(1, Math.max(0, d / width));
+  return t * t * (3 - 2 * t);
+}
+
+/** Gain/offset that maps values with mean/std `from` onto mean/std `to`. */
+export function matchStats(from: [number, number], to: [number, number]): [number, number] {
+  const gain = from[1] > 0 ? to[1] / from[1] : 1;
+  return [gain, to[0] - gain * from[0]];
+}
+
+/** [mean, std] of every 4th byte (the R channel of RGBA pixels). */
+function grayStats(px: Uint8ClampedArray): [number, number] {
+  let s = 0, s2 = 0;
+  const n = px.length / 4;
+  for (let j = 0; j < px.length; j += 4) { s += px[j]; s2 += px[j] * px[j]; }
+  const m = s / n;
+  return [m, Math.sqrt(Math.max(0, s2 / n - m * m))];
+}
+
 type RGB = [number, number, number];
 /** 256-entry RGB ramp from the background colour to `end`. */
 export function rampLut(end: RGB, start: RGB = BG_RGB): Uint8ClampedArray {
@@ -105,6 +126,8 @@ export function rampLut(end: RGB, start: RGB = BG_RGB): Uint8ClampedArray {
 const BG = '#0a0b0d', FG = '#e8e6e1', MUTED = '#8e939c';
 const BG_RGB: RGB = [10, 11, 13], SUN_RGB: RGB = [242, 181, 68], EARTH_RGB: RGB = [91, 156, 245];
 const OVERLAY_ALPHA = 0.7;
+const OVERLAY_R = 150000, OVERLAY_FEATHER = 10000;   // PGDA data disc (≈85°S) and its fade, metres
+const DETAIL_FEATHER = 0.15;                          // detail map fades out over its outer 15%
 const MIN_VIEW_M = 5000;       // polar max zoom: a 5 km area fills the view
 const GLOBAL_MAX_ZOOM = 40;    // global max zoom, relative to fit
 const FOCUS_VIEW_M = 60000;
@@ -150,7 +173,7 @@ export function mountMap(el: HTMLElement, opts: {
         <button type="button" data-ov="sp_sun" aria-pressed="false">Sunlight</button>
         <button type="button" data-ov="sp_earth" aria-pressed="false">Earth view</button>
       </div>
-      <div class="lmap-legend" hidden><span>0%</span><canvas width="256" height="1"></canvas><span>100% of the time</span></div>
+      <div class="lmap-legend" hidden><span>0%</span><canvas width="256" height="1"></canvas><span>100% of the time</span><span class="lmap-legend-note">· NASA data covers poleward of ~85°S</span></div>
       <div class="lmap-seg lmap-zoom" role="group" aria-label="Zoom">
         <button type="button" data-zoom="out" aria-label="Zoom out">&minus;</button>
         <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
@@ -180,6 +203,7 @@ export function mountMap(el: HTMLElement, opts: {
   const images: Record<string, HTMLImageElement> = {};
   const requested = new Set<string>();
   const overlays: Partial<Record<OverlayId, Overlay>> = {};
+  let detail: CanvasImageSource | null = null;   // Shackleton map, matched + feathered into the base
   const luts = { sp_sun: rampLut(SUN_RGB), sp_earth: rampLut(EARTH_RGB) };
   const errors = new Set<string>();
 
@@ -212,7 +236,7 @@ export function mountMap(el: HTMLElement, opts: {
       if (dead) return;
       images[id] = img;
       if (id === 'sp_sun' || id === 'sp_earth') {
-        try { overlays[id] = buildOverlay(img, luts[id]); } catch { fail(NAMES[id]); }
+        try { overlays[id] = buildOverlay(img, luts[id], bounds[id]); } catch { fail(NAMES[id]); }
       }
       refreshLoading(); draw();
     };
@@ -358,7 +382,10 @@ export function mountMap(el: HTMLElement, opts: {
       if (detailVisible(view, sb)) {
         load('shackleton_hillshade');
         const d = images.shackleton_hillshade;
-        if (d) drawGeo(d, d.naturalWidth, d.naturalHeight, sb);
+        if (d && base && !detail) {
+          try { detail = buildDetail(d, sb, base, b); } catch { detail = d; }
+        }
+        if (detail) drawGeo(detail, d.naturalWidth, d.naturalHeight, sb);
       }
       const ov = overlay !== 'none' ? overlays[overlay] : undefined;
       if (ov) {
@@ -599,19 +626,55 @@ export function mountMap(el: HTMLElement, opts: {
   };
 }
 
-/** Read the gray channel of an overlay image and recolour it through `lut`, once. */
-function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray): Overlay {
-  const w = img.naturalWidth, h = img.naturalHeight;
+function canvasOf(src: CanvasImageSource, w: number, h: number, sx = 0, sy = 0, sw = w, sh = h) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  const g = canvas.getContext('2d')!;
-  g.drawImage(img, 0, 0);
-  const im = g.getImageData(0, 0, w, h), px = im.data;
+  const g = canvas.getContext('2d', { willReadFrequently: true })!;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
+  return { canvas, g, im: g.getImageData(0, 0, w, h) };
+}
+
+/**
+ * Recolour an overlay's gray channel through `lut`, once, and mask it to a feathered disc of
+ * radius OVERLAY_R around the pole (the PGDA square's corners would otherwise end in a hard edge).
+ * Gray 0 is real data (never lit / never sees Earth), not nodata — the PGDA PNGs have no nodata.
+ */
+function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds): Overlay {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const { canvas, g, im } = canvasOf(img, w, h), px = im.data;
+  const kx = (b[2] - b[0]) / w, ky = (b[3] - b[1]) / h;
   const data = new Uint8Array(w * h);
   for (let i = 0, j = 0; i < data.length; i++, j += 4) {
     const v = (data[i] = px[j]);
     px[j] = lut[v * 3]; px[j + 1] = lut[v * 3 + 1]; px[j + 2] = lut[v * 3 + 2];
+    const x = b[0] + ((i % w) + 0.5) * kx, y = b[3] - (Math.floor(i / w) + 0.5) * ky;
+    px[j + 3] = 255 * feather(OVERLAY_R - Math.hypot(x, y), OVERLAY_FEATHER);
   }
   g.putImageData(im, 0, 0);
   return { canvas, data, w, h };
+}
+
+/**
+ * Detail hillshade blended into the base: gray gain/offset matched to the base over the same
+ * footprint (compared at base resolution, so the detail's extra sharpness doesn't skew the std),
+ * and alpha feathered to 0 over the outer DETAIL_FEATHER of the tile.
+ */
+function buildDetail(img: HTMLImageElement, db: Bounds, base: HTMLImageElement, bb: Bounds): HTMLCanvasElement {
+  const bw = base.naturalWidth, bh = base.naturalHeight;
+  const kx = bw / (bb[2] - bb[0]), ky = bh / (bb[3] - bb[1]);
+  const n = Math.max(8, Math.round((db[2] - db[0]) * kx));
+  const baseLow = canvasOf(base, n, n, (db[0] - bb[0]) * kx, (bb[3] - db[3]) * ky, (db[2] - db[0]) * kx, (db[3] - db[1]) * ky);
+  const detLow = canvasOf(img, n, n, 0, 0, img.naturalWidth, img.naturalHeight);
+  const [gain, off] = matchStats(grayStats(detLow.im.data), grayStats(baseLow.im.data));
+
+  const w = img.naturalWidth, h = img.naturalHeight, fw = DETAIL_FEATHER * Math.min(w, h);
+  const { canvas, g, im } = canvasOf(img, w, h), px = im.data;
+  for (let i = 0, j = 0; j < px.length; i++, j += 4) {
+    const v = gain * px[j] + off, c = i % w, r = Math.floor(i / w);
+    px[j] = px[j + 1] = px[j + 2] = v;
+    px[j + 3] = 255 * feather(Math.min(c, w - 1 - c, r, h - 1 - r), fw);
+  }
+  g.putImageData(im, 0, 0);
+  return canvas;
 }
