@@ -375,6 +375,7 @@ export function mountMap(el: HTMLElement, opts: {
           if (pg === id) overlays[pg] = buildOverlay(img, LAYERS[pg].lut, bounds[id]);
           else wides[pg] = buildOverlay(img, LAYERS[pg].lut, bounds[id], Infinity); // no disc mask: covers the whole map
         } catch { fail(NAMES[id]); }
+        if (pg === overlay) syncChrome(); // legend ends, when the layer was chosen (e.g. from the link) before its image arrived
       }
       // Build the blended detail once both images are in, here rather than in the draw path (4M-pixel loop).
       const d = images.shackleton_hillshade, base = images.sp_hillshade;
@@ -656,6 +657,15 @@ export function mountMap(el: HTMLElement, opts: {
   }
 
   function drawPolarFurniture(b: Bounds) {
+    // 80°S: the edge of the south polar region this map covers (it touches the map's sides; the corners lie beyond).
+    {
+      const [cx, cy] = toScreen(view, 0, 0), r = Math.hypot(...spFwd(-80, 0)) * view.scale;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(10,11,13,0.45)'; ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(232,230,225,0.7)'; ctx.stroke();
+      const a = Math.PI * 0.75; // label on the ring, lower left, clear of the longitude labels
+      text('80°S', cx + r * Math.cos(a) + 6, cy + r * Math.sin(a) - 8, MUTED);
+    }
     // Longitude labels + Earth direction, only near the default zoom where the whole disc is visible.
     if (view.scale <= minScale() * 1.05) {
       const [l, t] = toScreen(view, b[0], b[3]), [r, bt] = toScreen(view, b[2], b[1]);
