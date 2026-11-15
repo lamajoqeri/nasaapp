@@ -243,7 +243,8 @@ const MARKUP = `
         </div>
       </div>
       <div class="sec-head"><h3 class="lbl" id="c-title"></h3><div id="c-legend" class="c-legend" aria-label="Scenario colours"></div></div>
-      <p id="c-read" class="c-read"></p>
+      <div class="c-readrow"><p id="c-read" class="c-read"></p>
+        <button type="button" id="c-zoom-btn" class="mini" aria-haspopup="dialog" title="Enlarge the chart">${ICON.sky}<span>Zoom</span></button></div>
       <canvas id="c-chart" class="chart" role="img" aria-label="Chart"></canvas>
     </section>
 
@@ -270,6 +271,7 @@ const MARKUP = `
       </div>
     </section>
 
+    <dialog id="c-zoom" class="sky zoom" aria-label="Chart, enlarged"></dialog>
   </div>`;
 
 export interface InspectorHandle {
@@ -463,7 +465,24 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     else if (du) void act('chart.set', { durationDays: +du.dataset.dur! });
     else if (t.closest('#i-details')) void act('inspector.details', { open: !state.details });
     else if (t.closest('#i-sky')) void act('sky.open', {}).catch(() => {});
+    else if (t.closest('#c-zoom-btn')) zoomed(!zoom.open);
+    else if (t === zoom && downOnScrim) zoomed(false); // the dialog element itself = the scrim
   });
+
+  /* ---- zoom: the chart section itself (controls, legend, readout, canvas) moves into a modal dialog and back ---- */
+
+  const zoom = $<HTMLDialogElement>('#c-zoom'), sec = $('.chart-sec'), home = document.createComment('chart');
+  let downOnScrim = false; // a drag that starts inside and ends on the scrim must not close it
+  zoom.addEventListener('pointerdown', (e) => { downOnScrim = e.target === zoom; });
+  zoom.addEventListener('keydown', (e) => e.stopPropagation()); // the page's shortcuts stay off while it is open
+  zoom.addEventListener('close', () => zoomed(false)); // Esc
+  function zoomed(on: boolean) {
+    if (on === (sec.parentElement === zoom)) return;
+    if (on) { sec.before(home); zoom.append(sec); zoom.showModal(); }
+    else { home.replaceWith(sec); zoom.close(); }
+    $('#c-zoom-btn span').textContent = on ? 'Close' : 'Zoom';
+    chart.render(); // the ResizeObserver also fires; this avoids one stale frame
+  }
 
   /* ---- pointer: hover readout, click or drag to scrub ---- */
 

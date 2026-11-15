@@ -358,7 +358,11 @@ button.mini:hover:not(:disabled) { color: var(--fg); }
 .c-read .rv { display: inline-flex; align-items: center; gap: 5px; min-width: 6ch; }
 .c-read .rv i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
 .c-read .rv b { font-weight: 400; }
-#c-read { margin-bottom: 4px; }
+.c-readrow { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.c-readrow .c-read { flex: 1; min-width: 0; }
+/* chart zoom: the chart section moved into a dialog (shares dialog.sky's frame and backdrop) */
+dialog.zoom .chart-sec { width: min(1200px, calc(100vw - 18px)); padding: 14px; }
+dialog.zoom canvas.chart { height: min(64vh, 620px); }
 canvas.chart { height: 156px; }
 canvas.chart { border: 1px solid var(--line); cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 #c-note { margin-top: 6px; min-height: 69px; } /* four lines for either metric: switching never moves what is below */
