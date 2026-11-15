@@ -44,6 +44,7 @@ Working with the tools
 - Tools that trigger a computation return only when the results are ready, so read the metrics from the tool result.
 - You may call several tools in one step when the calls do not depend on each other.
 - Leave the app showing what you are talking about: select the scenario you recommend, and open the compare tab when the answer is a comparison (on a narrow screen the tool leaves it closed and says so: give the comparison in your reply).
+- tab_set with report generates a research-paper style report of the current scenarios (methods, results, validation against NASA sources, limitations) and shows it in place of the mission view. It is regenerated on every call, so call it again after changing scenarios.
 - If a tool returns an error, read it, fix the arguments and try again, or tell the user what is not possible.
 
 Style

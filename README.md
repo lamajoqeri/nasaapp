@@ -19,7 +19,7 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 - **Compare.** One table, scenarios side by side, best value marked in each row, with the change under each value when a slip is set.
 - **Map.** South-pole and whole-Moon maps with shading layers for NASA's average sunlight and Earth visibility, permanently shadowed regions, elevation and slope.
 - **Science context.** Each scenario reports the distance to the nearest permanently shadowed region, the cold traps where water ice can survive and the reason missions go to the south pole.
-- **Evidence.** A plain-language explanation of why the south pole is hard, a draggable comparison of a real LRO photo against our prediction for the same moment, and every validation number below.
+- **Report.** "Generate report" writes up the current scenarios as a research paper: data, methods, results, a comparison of real LRO photos against our predicted shadows, every validation number below, and the known limits. It prints or saves as PDF.
 - Scenarios, slip, view and chart settings are stored in the URL, so a link reproduces the screen.
 
 ### How this answers the challenge
