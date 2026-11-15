@@ -1,18 +1,20 @@
-// Shell: top bar, scenario rail, stage (3D / map), inspector, timeline dock, compare sheet, evidence page.
+// Shell: top bar, agent rail (scenario chips, editor pop-over, chat), stage (3D / map), inspector, timeline dock,
+// compare sheet, evidence page. Every control calls an action (see "actions" below); the agent uses the same ones.
 import { core, type Range } from '../core/api';
 import { DEG, enu, R } from '../core/geom';
 import { stripTimeAt } from './strips';
-import { coord, DAY, delta, dur, isoMin, pctDelta, pick, shortCaption, utc, type Row } from './format';
+import { caption, coord, DAY, delta, dur, isoMin, pctDelta, pick, shortCaption, utc, type Row } from './format';
 import { mountMap, type MapHandle } from './map';
 import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
 import { compareTable } from './compare';
-import { mountInspector, readHash as readInspectorHash, writeHash as writeInspectorHash, type InspectorHandle } from './inspector';
-import { mountSky, readHash as readSkyHash, writeHash as writeSkyHash } from './sky';
+import { inspectorState, mountInspector, readHash as readInspectorHash, writeHash as writeInspectorHash, type InspectorHandle } from './inspector';
+import { mountSky, readHash as readSkyHash, skyState, writeHash as writeSkyHash } from './sky';
+import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools } from './actions';
+import { mountAgent } from '../agent/panel';
 import type { View3DHandle } from '../view3d';
 import { regionAt, type RegionTile } from '../view3d/regions';
 import { onView3dChange, view3dState } from '../view3d/actions'; // registers render.set / camera.set
-import { run } from './actions';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
 type View = 'mission' | 'evidence';
@@ -39,8 +41,10 @@ let sites: SiteRec[] = [];
 let ranges: Range[] = [];
 const scs: Scenario[] = [];
 const cards = new Map<Scenario, HTMLElement>();
+const chips = new Map<Scenario, HTMLButtonElement>();
+const pending = new Map<Scenario, Promise<unknown>>(); // worker results in flight, so actions can wait for them
 let sel = 0, slip = 0, hours = 0, playing = false, step = 100;
-let view: View = 'mission', mode: Mode = '3d', autoMap = false, forced3d = false, cmpOpen = false;
+let view: View = 'mission', mode: Mode = '3d', autoMap = false, forced3d = false, cmpOpen = false, editorOpen = false;
 let map: MapHandle | undefined, view3d: View3DHandle | undefined, loading3d = false, err3d = '', evidenceMounted = false;
 let plotW = 0, lanesQueued = false;
 let insp: InspectorHandle | undefined; // right inspector: markup, charts and painting live in ui/inspector.ts
@@ -71,6 +75,16 @@ const whenOf = (s: Scenario) => isoMin(s.spec.t).replace('T', ' ');
 
 const env = { slip: () => slip, rangeOf, onUpdate };
 
+/** True while a control's action runs its synchronous part: only then may it move focus (never on agent calls). */
+let byUser = false;
+/** A control fires an action. Failures are the action's own message (bad input); nothing else to show. */
+const ui = (name: string, args?: object) => {
+  byUser = true;
+  try { run(name, args).catch((e) => console.warn(e)); } finally { byUser = false; }
+};
+const idOf = (sc: Scenario) => LETTERS[scs.indexOf(sc)];
+const iso = (t: number) => isoMin(t) + 'Z';
+
 /* ------------------------------------------------------------------ scenario cards */
 
 function makeCard(sc: Scenario): HTMLElement {
@@ -79,10 +93,10 @@ function makeCard(sc: Scenario): HTMLElement {
   const kpi = (k: string, label: string) => `<div data-k="${k}"><dt>${label}</dt><dd><span class="v">–</span><small class="sd"></small></dd><dd class="d"></dd></div>`;
   el.innerHTML = `
     <div class="card-top">
-      <button class="card-head" type="button">
+      <div class="card-head">
         <span class="badge" aria-hidden="true"></span>
         <span class="card-title"><span class="name"></span><span class="when"></span></span>
-      </button>
+      </div>
       <button class="rm icon" type="button">${ICON.close}</button>
     </div>
     <dl class="kpis">${kpi('lit', 'Sunlit')}${kpi('earth', 'Earth in view')}${kpi('dark', 'Longest dark')}</dl>
@@ -117,46 +131,35 @@ function makeCard(sc: Scenario): HTMLElement {
   og.append(new Option('Custom coordinates', 'custom'));
   site.append(og);
 
-  site.onchange = () => {
-    const s = sites.find((x) => x.id === site.value);
-    sc.spec.site = site.value;
-    if (s) { sc.spec.lat = s.lat; sc.spec.lon = s.lon; }
-    changed(sc);
-    map?.focus(sc.spec.lat, sc.spec.lon);
-  };
+  const id = () => idOf(sc);
+  site.onchange = () => ui('scenario.update', site.value === 'custom' ? { id: id(), lat: sc.spec.lat, lon: sc.spec.lon } : { id: id(), site: site.value });
   const lat = $<HTMLInputElement>('.lat', el), lon = $<HTMLInputElement>('.lon', el);
   lat.onchange = lon.onchange = () => {
-    const a = lat.valueAsNumber, o = lon.valueAsNumber;
-    if (!(Math.abs(a) <= 90) || !(o >= -180 && o <= 360)) {
-      sc.error = 'Latitude must be -90 to 90 and longitude -180 to 360.';
-      return paintCard(sc);
-    }
-    sc.spec.lat = a; sc.spec.lon = o; changed(sc);
+    run('scenario.update', { id: id(), lat: lat.valueAsNumber, lon: lon.valueAsNumber })
+      .catch((e) => { sc.error = BAD_COORD; paintCard(sc); console.warn(e); });
   };
   const date = $<HTMLInputElement>('.date', el);
   date.onchange = () => {
-    const t = Date.parse(date.value + 'Z');
-    if (Number.isNaN(t)) return;
-    sc.spec.t = clampT(t); changed(sc);
+    if (date.value) ui('scenario.update', { id: id(), t: date.value + 'Z' });
   };
   const mast = $<HTMLSelectElement>('.mast', el);
-  mast.onchange = () => { sc.spec.mast = +mast.value; changed(sc); };
-  $('.rm', el).onclick = (e) => { e.stopPropagation(); remove(sc); };
+  mast.onchange = () => ui('scenario.update', { id: id(), mast: +mast.value });
+  $('.rm', el).onclick = () => ui('scenario.remove', { id: id() });
   el.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>('[data-t]');
-    if (b) { sc.spec.t = clampT(+b.dataset.t!); changed(sc); }
+    if (b) ui('scenario.update', { id: id(), t: iso(+b.dataset.t!) });
     const n = t.closest<HTMLElement>('[data-nudge]');
-    if (n) nudge(sc, n.dataset.nudge!, step);
+    if (n) ui('scenario.nudge', { id: id(), dir: n.dataset.nudge!.toUpperCase(), m: step });
     const st = t.closest<HTMLElement>('[data-step]');
-    if (st) { step = +st.dataset.step!; for (const s of scs) syncCard(s); }
-    if (!t.closest('.rm')) select(scs.indexOf(sc));
+    if (st) { step = +st.dataset.step!; for (const s of scs) syncCard(s); } // how far the next nudge goes: an argument, not app state
   });
   return el;
 }
 
 /** Move the site `m` metres along local north/east/south/west (great circle, so it is exact near the pole). */
 function nudge(sc: Scenario, dir: string, m: number) {
+  dir = dir.toLowerCase();
   const { e, n, u } = enu(sc.spec.lat, sc.spec.lon);
   const d = dir === 'n' ? n : dir === 's' ? n.map((v) => -v) : dir === 'e' ? e : e.map((v) => -v);
   const a = m / R, p = u.map((v, i) => Math.cos(a) * v + Math.sin(a) * d[i]);
@@ -175,9 +178,7 @@ function syncCard(sc: Scenario) {
   el.classList.toggle('sel', on);
   $('.badge', el).textContent = L;
   const head = $('.card-head', el);
-  head.setAttribute('aria-expanded', String(on));
   head.setAttribute('aria-label', `Scenario ${L}: ${nameOf(sc)}, landing ${whenOf(sc)} UTC${on ? ', selected' : ''}`);
-  $('.card-more', el).toggleAttribute('inert', !on);
   const rm = $<HTMLButtonElement>('.rm', el);
   rm.disabled = scs.length <= 1;
   rm.setAttribute('aria-label', `Remove scenario ${L}`); rm.title = 'Remove scenario';
@@ -205,6 +206,22 @@ function syncCard(sc: Scenario) {
   }
   if (rangeOf(spec.t) !== ranges[0]) note += ' Apollo-era date: no Deep Space Network data.';
   $('.note', el).innerHTML = note;
+  paintChip(sc);
+}
+
+/** The compact chip in the strip above the chat: letter, name, date and the three headline numbers. */
+function paintChip(sc: Scenario) {
+  const el = chips.get(sc);
+  if (!el) return;
+  const i = scs.indexOf(sc), on = i === sel, L = LETTERS[i];
+  const v = (k: 'lit' | 'earth' | 'dark') => { const r = sc.rows && pick(sc.rows, k); return r ? r.short ?? r.text : '–'; };
+  el.classList.toggle('busy', sc.busy);
+  el.classList.toggle('err', !!sc.error);
+  el.setAttribute('aria-pressed', String(on));
+  el.setAttribute('aria-label', `Scenario ${L}: ${nameOf(sc)}, landing ${whenOf(sc)} UTC. Sunlit ${v('lit')}, Earth in view ${v('earth')}, longest dark ${v('dark')}. ${on ? 'Selected. ' : ''}Opens the editor.`);
+  el.innerHTML = `<span class="badge${on ? ' on' : ''}" aria-hidden="true">${L}</span><span class="chip-name${recOf(sc) ? '' : ' mono'}">${esc(nameOf(sc))}</span>
+    <span class="chip-when">${whenOf(sc).slice(0, 10)}</span>
+    <span class="chip-kpi"><b class="sun" title="Sunlit, share of the 29.5 days">${v('lit')}</b><b class="earth" title="Earth in view">${v('earth')}</b><span title="Longest dark">${sc.error ? 'no result' : `☾ ${v('dark')}`}</span></span>`;
 }
 
 /** Push results into the card's headline numbers and status line. */
@@ -216,6 +233,7 @@ function paintCard(sc: Scenario) {
   st.className = 'card-status' + (sc.error || sc.slipError ? ' err' : '');
   st.textContent = sc.error || sc.slipError || (sc.base ? shortCaption(sc.base.metrics)
     : 'Computing the terrain horizon');
+  paintChip(sc);
   if (!sc.rows) return;
   for (const k of ['lit', 'earth', 'dark'] as const) {
     const box = $(`[data-k="${k}"]`, el), r = pick(sc.rows, k);
@@ -231,10 +249,17 @@ function paintCard(sc: Scenario) {
 /** Spec changed: refresh controls, recompute, update the URL and the stage. */
 function changed(sc: Scenario) {
   syncCard(sc);
-  void sc.compute();
+  track(sc, sc.compute());
   saveHash();
   if (sc === cur()) { paintHead(); stagePolicy(); }
   syncStage();
+}
+
+/** Remember a worker job so settled() can wait for it and for whatever replaces it. */
+function track(sc: Scenario, p: Promise<unknown>) { pending.set(sc, Promise.all([pending.get(sc), p])); }
+async function settled(sc: Scenario) {
+  let p;
+  do { p = pending.get(sc); await p; } while (pending.get(sc) !== p);
 }
 
 function onUpdate(sc: Scenario) {
@@ -250,37 +275,52 @@ function select(i: number) {
   sel = i;
   for (const s of scs) syncCard(s);
   paintInspector(); queueLanes(); stagePolicy(); syncStage(); saveHash();
-  if (matchMedia('(min-width: 1100px)').matches) setTimeout(() => cards.get(cur())?.scrollIntoView({ block: 'nearest' }), 160); // after the expand transition
   if (mode === 'map') map?.focus(cur().spec.lat, cur().spec.lon);
   if (cmpOpen) paintCompare();
 }
 
-function add(spec: Spec, quiet = false) {
+function add(spec: Spec, quiet = false): Scenario {
   const sc = new Scenario(spec, env), el = makeCard(sc);
-  scs.push(sc); cards.set(sc, el);
+  const chip = document.createElement('button');
+  chip.type = 'button'; chip.className = 'chip';
+  chip.onclick = () => ui('scenario.select', { id: idOf(sc), editor: true });
+  scs.push(sc); cards.set(sc, el); chips.set(sc, chip);
   $('#cards').append(el);
-  void sc.compute();
+  $('#add').before(chip);
+  track(sc, sc.compute());
   if (!quiet) { select(scs.length - 1); afterCount(); }
+  return sc;
 }
 function remove(sc: Scenario) {
   if (scs.length <= 1) return;
-  const i = scs.indexOf(sc);
+  const i = scs.indexOf(sc), lost = !!cards.get(sc)?.contains(document.activeElement); // e.g. its own ✕
   scs.splice(i, 1);
   cards.get(sc)?.remove(); cards.delete(sc);
+  chips.get(sc)?.remove(); chips.delete(sc); pending.delete(sc);
   sel = Math.min(sel > i ? sel - 1 : sel, scs.length - 1);
   cards.get(cur())?.classList.remove('sel'); // force select() to repaint
   select(sel); afterCount();
+  if (lost) (editorOpen ? $('#editor-close') : chips.get(cur()))?.focus({ preventScroll: true });
 }
 /** Scenario count changed: letters, lane badges, dock height. */
 function afterCount() {
   for (const s of scs) { syncCard(s); paintCard(s); }
-  $<HTMLButtonElement>('#add').disabled = scs.length >= MAX;
-  $('#count').textContent = `${scs.length} of ${MAX}`;
+  const addBtn = $<HTMLButtonElement>('#add'), full = scs.length >= MAX;
+  if (full && document.activeElement === addBtn) chips.get(scs[scs.length - 1])?.focus({ preventScroll: true });
+  addBtn.hidden = full;
   $<HTMLCanvasElement>('#lanes').style.height = `${lanesHeight(scs.length)}px`;
   $('.playhead').style.height = `${TOP + scs.length * PITCH - 2}px`;
   $('#lane-badges').innerHTML = scs.map((_, i) => `<button type="button" class="badge" data-lane="${i}" aria-label="Select scenario ${LETTERS[i]}">${LETTERS[i]}</button>`).join('');
   queueLanes(); syncStage(); saveHash();
   if (cmpOpen) paintCompare();
+}
+
+/** The full card of the selected scenario, as a pop-over under the chips. */
+function setEditor(open: boolean, focus = false) {
+  editorOpen = open;
+  $('#editor').hidden = !open;
+  if (open && focus) $('#editor-close').focus({ preventScroll: true });
+  else if ($('#editor').contains(document.activeElement)) chips.get(cur())?.focus();
 }
 
 /* ------------------------------------------------------------------ inspector */
@@ -394,13 +434,8 @@ function showStage() {
     if (!map) {
       map = mountMap($('#smap'), {
         dataBase, sites,
-        onPick: (lat, lon, id) => {
-          const c = cur();
-          if (!c) return;
-          c.spec.site = id ?? 'custom';
-          c.spec.lat = +lat.toFixed(5); c.spec.lon = +lon.toFixed(5);
-          changed(c);
-        },
+        onPick: (lat, lon, id) => { if (cur()) ui('scenario.update', id ? { id: LETTERS[sel], site: id } : { id: LETTERS[sel], lat, lon }); },
+        onBar: (c) => ui('view.set', { region: keyOf(MAP_REGION, c.mode), overlay: keyOf(MAP_OVERLAY, c.overlay) }),
       });
       map.focus(cur().spec.lat, cur().spec.lon);
     }
@@ -411,13 +446,7 @@ function showStage() {
     import('../view3d').then(({ mount3D }) => {
       view3d = mount3D($('#s3d'), {
         dataBase, startZoom: 0.62, region: regionOf(cur().spec.lat, cur().spec.lon),
-        onPick: (lat, lon) => {
-          const c = cur();
-          if (!c) return;
-          c.spec.site = 'custom';
-          c.spec.lat = +lat.toFixed(5); c.spec.lon = +lon.toFixed(5);
-          changed(c);
-        },
+        onPick: (lat, lon) => { if (cur()) ui('scenario.update', { id: LETTERS[sel], lat, lon }); },
         onReady: () => { stage.classList.remove('loading'); syncStage(); },
         onError: () => stage.classList.remove('loading'), // the module shows its own message
       });
@@ -459,13 +488,13 @@ function paintCompare() {
   $('#cmp-legend').innerHTML = `<i class="dot"></i> best in the row${slip
     ? ` · second line: change if the landing is delayed by ${slip} d, <span class="good">better</span> or <span class="bad">worse</span>` : ''}`;
 }
-function setCompare(open: boolean) {
+function setCompare(open: boolean, focus = false) {
   cmpOpen = open;
   const sheet = $('#sheet'), btn = $('#cmp');
   sheet.classList.toggle('open', open);
   sheet.toggleAttribute('inert', !open);
   btn.setAttribute('aria-pressed', String(open));
-  if (open) { paintCompare(); $('#cmp-close').focus({ preventScroll: true }); }
+  if (open) { paintCompare(); if (focus) $('#cmp-close').focus({ preventScroll: true }); }
   else if (sheet.contains(document.activeElement)) btn.focus();
   saveHash();
 }
@@ -473,7 +502,14 @@ function setCompare(open: boolean) {
 /* ------------------------------------------------------------------ URL hash
    #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&rm=clear&cmp=1&v=evidence */
 
+let hashTimer = 0;
+/** Coalesced: actions call this freely (a scrub drag fires one per pointer move, and browsers rate-limit replaceState). */
 function saveHash() {
+  clearTimeout(hashTimer);
+  hashTimer = window.setTimeout(writeHash, 150);
+}
+function writeHash() {
+  clearTimeout(hashTimer);
   if (!scs.length) return;
   const p = new URLSearchParams();
   for (const { spec } of scs) p.append('c', `${spec.site === 'custom' ? `${spec.lat},${spec.lon}` : spec.site}~${isoMin(spec.t)}~${spec.mast}`);
@@ -540,6 +576,331 @@ async function setView(v: View) {
   }
 }
 
+/* ------------------------------------------------------------------ actions
+   The only way a user-visible change happens: controls call ui(name, args), the agent calls the same registry.
+   Actions that start worker compute resolve when the results are in, and return the headline metrics. */
+
+const BAD_COORD = 'Latitude must be -90 to 90 and longitude -180 to 360.';
+const MAP_REGION = { south_pole: 'polar', whole_moon: 'global' } as const;
+const MAP_OVERLAY = { terrain: 'none', sunlight: 'sp_sun', earth: 'sp_earth' } as const;
+const keyOf = (o: Record<string, string>, v?: string) => Object.keys(o).find((k) => o[k] === v);
+
+function scOf(id: string): Scenario {
+  const sc = id.trim().length === 1 ? scs[LETTERS.indexOf(id.trim().toUpperCase())] : undefined;
+  if (!sc) throw new Error(`No scenario "${id}". Scenarios now: ${scs.map(idOf).join(', ')}.`);
+  return sc;
+}
+function siteOf(q: string): SiteRec {
+  const k = q.trim().toLowerCase();
+  const s = sites.find((x) => x.id === k) ?? sites.find((x) => x.name.toLowerCase() === k);
+  if (!s) throw new Error(`Unknown site "${q}". Use ${toolName('sites.search')} to find a catalogue id, or give lat and lon.`);
+  return s;
+}
+function timeOf(s: string): number {
+  const t = Date.parse(/T/.test(s) && !/(Z|[+-]\d\d:?\d\d)$/i.test(s) ? s + 'Z' : s);
+  if (Number.isNaN(t)) throw new Error(`Cannot read "${s}" as a UTC time. Use ISO 8601, for example 2027-03-02T00:00Z.`);
+  return clampT(t);
+}
+
+interface SpecArgs { site?: string; lat?: number; lon?: number; t?: string; mast?: number }
+/** `spec` with the given fields replaced. A site sets the position; lat/lon make it a custom point. Throws on bad input. */
+function patch(spec: Spec, a: SpecArgs): Spec {
+  const out = { ...spec };
+  if (a.site != null && a.site !== 'custom') { const s = siteOf(a.site); out.site = s.id; out.lat = s.lat; out.lon = s.lon; }
+  else if (a.lat != null || a.lon != null) {
+    const lat = a.lat ?? spec.lat, lon = a.lon ?? spec.lon;
+    if (!(Math.abs(lat) <= 90) || !(lon >= -180 && lon <= 360)) throw new Error(BAD_COORD);
+    out.site = 'custom'; out.lat = +lat.toFixed(5); out.lon = +lon.toFixed(5);
+  }
+  if (a.t != null) out.t = timeOf(a.t);
+  if (a.mast != null) {
+    if (!MASTS.includes(a.mast)) throw new Error(`Mast must be one of ${MASTS.join(', ')} m.`);
+    out.mast = a.mast;
+  }
+  return out;
+}
+
+const r1 = (x: number) => Math.round(x * 10) / 10;
+const winPct = (rs: Row[]) => r1((100 * pick(rs, 'earth').num!) / (WIN / 3600e3));
+/** Headline metrics of a scenario as the model reads them; null while computing. */
+function headline(sc: Scenario) {
+  if (sc.error) return { error: sc.error };
+  const b = sc.base;
+  if (!b || !sc.rows || sc.busy) return null;
+  const m = b.metrics, at = (h: number | null) => (h === null ? null : iso(sc.spec.t + h * 3600e3));
+  return {
+    sunlitPct: r1(pick(sc.rows, 'lit').num!),
+    sunlitPctSd: b.uncertainty ? r1(b.uncertainty.std.pctLit) : null,
+    earthPct: winPct(sc.rows),
+    longestDarkHours: Math.round(pick(sc.rows, 'dark').num!),
+    dsnHours: b.mission.commsHours === null ? null : Math.round(b.mission.commsHours),
+    battery: pick(sc.rows, 'battery').text,
+    atLanding: { sunElevationDeg: r1(m.sunEl), sunDiskVisiblePct: Math.round(m.sunFrac * 100), earthInView: m.earthVisible },
+    // `at` null: it does not happen within the 29.5 days
+    nextSunEvent: m.sunFrac > 0 ? { type: 'sunset', at: at(m.hoursToSunset) } : { type: 'sunrise', at: at(m.hoursToSunrise) },
+    nextEarthEvent: m.earthVisible ? { type: 'earthset', at: at(m.hoursToEarthset) } : { type: 'earthrise', at: at(m.hoursToEarthrise) },
+    inWords: caption(m),
+    ...(slip && sc.srows ? {
+      delayed: { days: slip, sunlitPct: r1(pick(sc.srows, 'lit').num!), earthPct: winPct(sc.srows), longestDarkHours: Math.round(pick(sc.srows, 'dark').num!), battery: pick(sc.srows, 'battery').text },
+    } : slip && sc.slipError ? { delayed: { days: slip, error: sc.slipError } } : {}),
+  };
+}
+function describe(sc: Scenario) {
+  const { spec } = sc;
+  return { id: idOf(sc), site: spec.site, name: nameOf(sc), lat: spec.lat, lon: spec.lon, landing: iso(spec.t), mastM: spec.mast, in3dRegion: inTile(spec.lat, spec.lon), metrics: headline(sc) };
+}
+const oneLine = (sc: Scenario) => {
+  const h = headline(sc);
+  return `${idOf(sc)}: ${nameOf(sc)}, ${iso(sc.spec.t)}` + (h && 'sunlitPct' in h ? ` (sunlit ${h.sunlitPct}%, Earth ${h.earthPct}%, longest dark ${h.longestDarkHours} h)` : '');
+};
+
+function viewState() {
+  const mapRegion = keyOf(MAP_REGION, map?.state().mode) ?? 'south_pole';
+  return {
+    mode,
+    mapRegion,
+    mapOverlay: mapRegion === 'whole_moon' ? 'terrain' : keyOf(MAP_OVERLAY, map?.state().overlay) ?? 'terrain', // no overlays there
+    mapCenter: map && mode === 'map' ? map.state().center.map((v) => +v.toFixed(4)) : null,
+    mapKmAcross: map && mode === 'map' ? Math.round(map.state().kmAcross * 10) / 10 : null,
+    region3d: view3d?.region() ?? null,
+    note: $('#stage-note').textContent || null,
+  };
+}
+const tabNow = () => (view === 'mission' && cmpOpen ? 'compare' : view);
+
+/** Everything on screen, as JSON: what state.get returns. */
+function appState() {
+  return {
+    tab: tabNow(), view: viewState(), selected: LETTERS[sel], editorOpen,
+    hoursAfterLanding: Math.round(hours), timeShown: scs.length ? iso(stageTime()) : null, playing, slipDays: slip,
+    maxScenarios: MAX,
+    landingDatesAvailable: ranges.map((r) => ({ from: iso(r.t0), to: iso(r.t1 - WIN) })),
+    scenarios: scs.map(describe),
+    // Effort 2 state: charts, Details, viability verdicts; sky pop-up; 3D render mode and camera
+    inspector: inspectorState(), sky: skyState(), view3d: view3dState(),
+  };
+}
+
+/** Sky state of every scenario at the scrubber position. */
+function nowState() {
+  const i = Math.round(hours);
+  return {
+    hoursAfterLanding: i, timeShown: iso(stageTime()),
+    scenarios: scs.map((sc) => {
+      const s = sc.base?.series, k = s ? Math.min(i, s.t.length - 1) : 0;
+      return s ? { id: idOf(sc), at: iso(sc.spec.t + i * 3600e3), sunElevationDeg: r1(s.sunEl[k]), sunDiskVisiblePct: Math.round(s.sunFrac[k] * 100), earthInView: !!s.earthVis[k], dsnLink: !!s.earthVis[k] && !!sc.base!.mission.dsn[k], computing: sc.busy }
+        : { id: idOf(sc), computing: true };
+    }),
+  };
+}
+
+let slipTimer = 0;
+const slipWaiters: (() => void)[] = [];
+function paintSlip() {
+  $<HTMLInputElement>('#slip').value = String(slip);
+  $('#slipv').textContent = `${slip} d`;
+  $('.shell').classList.toggle('has-slip', slip > 0);
+}
+/** Marker and lane layout move now; the numbers follow a short debounce (the slider fires on every step). Resolves when they are in. */
+function setSlip(days: number): Promise<void> {
+  slip = days;
+  paintSlip(); paintStrip(); queueLanes();
+  clearTimeout(slipTimer);
+  slipTimer = window.setTimeout(async () => {
+    const w = slipWaiters.splice(0);
+    for (const c of scs) track(c, c.computeSlip());
+    paintInspector(); saveHash();
+    await Promise.all(scs.map(settled));
+    for (const f of w) f();
+  }, 120);
+  return new Promise((res) => slipWaiters.push(res));
+}
+
+function registerActions() {
+  const str = (description: string) => ({ type: 'string' as const, description });
+  const num = (description: string) => ({ type: 'number' as const, description });
+  const ID = str('Scenario id: its letter, A to D.');
+  const SPEC = {
+    site: str(`Catalogue site id (see ${toolName('sites.search')}), e.g. "malapert". Sets the position.`),
+    lat: num('Latitude in degrees, -90 to 90. Use with lon for a point that is not in the catalogue.'),
+    lon: num('Longitude in degrees east, -180 to 360.'),
+    t: str('Landing time, UTC, ISO 8601, e.g. "2027-03-02T00:00Z". Clamped to the dates the app can compute.'),
+    mast: { type: 'integer' as const, enum: MASTS, description: 'Height of the panel/antenna above the ground in metres.' },
+  };
+
+  register({
+    name: 'state.get',
+    description: 'Read everything on screen as JSON: the scenarios (id, site, position, landing time, mast, headline metrics), the selected scenario, the active tab, the stage view (3D or map, map region and overlay), the time scrubber, the landing delay and whether playback is running. Call this before acting when unsure of the current state.',
+    schema: schema(),
+    run: async () => snapshot(),
+  });
+  register({
+    name: 'sites.search',
+    description: 'Search the site catalogue by words in the id, name, programme or note. An empty query lists every site. Returns id, name, lat, lon, programme, historical landing date if any, and a note with the published average sunlight and Earth visibility where known.',
+    schema: schema({ query: str('Words to look for, e.g. "artemis", "apollo", "ridge". Empty for all sites.') }, ['query']),
+    run: async ({ query }: { query: string }) => {
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const hit = sites.filter((s) => { const hay = `${s.id} ${s.name} ${s.program} ${s.note}`.toLowerCase(); return words.every((w) => hay.includes(w)); });
+      return { count: hit.length, sites: hit.map((s) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, programme: s.program, landed: s.date, note: s.note, in3dRegion: inTile(s.lat, s.lon) })) };
+    },
+  });
+  register({
+    name: 'scenario.add',
+    description: `Add a scenario (at most ${MAX}) and select it. Give a catalogue site, or lat and lon together; fields left out are copied from the selected scenario. Waits for the computation and returns the new scenario with its metrics: sunlit %, Earth-in-view %, longest dark, DSN hours, battery, next sunset/sunrise and Earthset/Earthrise times.`,
+    schema: schema(SPEC),
+    run: async (a: SpecArgs) => {
+      if (scs.length >= MAX) throw new Error(`There are already ${MAX} scenarios. Remove one first.`);
+      if ((a.lat == null) !== (a.lon == null)) throw new Error('Give lat and lon together.');
+      const sc = add(patch(cur().spec, a));
+      await settled(sc);
+      return { summary: `Added scenario ${oneLine(sc)}`, scenario: describe(sc) };
+    },
+  });
+  register({
+    name: 'scenario.update',
+    description: 'Change a scenario: its site (or lat/lon for a custom point), landing time or mast height. Only the fields given change. Waits for the recomputation and returns the scenario with its new metrics.',
+    schema: schema({ id: ID, ...SPEC }, ['id']),
+    run: async ({ id, ...a }: SpecArgs & { id: string }) => {
+      const sc = scOf(id), next = patch(sc.spec, a);
+      Object.assign(sc.spec, next);
+      changed(sc);
+      if (a.site != null && sc === cur()) map?.focus(next.lat, next.lon);
+      await settled(sc);
+      return { summary: `Updated scenario ${oneLine(sc)}`, scenario: describe(sc) };
+    },
+  });
+  register({
+    name: 'scenario.nudge',
+    description: 'Move a scenario a number of metres north, east, south or west, to test how sensitive the site is to position. The scenario becomes a custom point. Waits for the recomputation and returns the new metrics.',
+    schema: schema({ id: ID, dir: { type: 'string', enum: ['N', 'E', 'S', 'W'], description: 'Direction.' }, m: num('Distance in metres, above 0 and at most 5000. The buttons use 50, 100, 250 and 500.') }, ['id', 'dir', 'm']),
+    run: async ({ id, dir, m }: { id: string; dir: string; m: number }) => {
+      const sc = scOf(id);
+      if (!(m > 0 && m <= 5000)) throw new Error('m must be above 0 and at most 5000 metres.');
+      nudge(sc, dir, m);
+      await settled(sc);
+      return { summary: `Moved ${m} m ${dir}: scenario ${oneLine(sc)}`, scenario: describe(sc) };
+    },
+  });
+  register({
+    name: 'scenario.remove',
+    description: 'Remove a scenario. The last one cannot be removed. Scenarios after it move up one letter; the result lists the new ids.',
+    schema: schema({ id: ID }, ['id']),
+    run: async ({ id }: { id: string }) => {
+      const sc = scOf(id), was = `${idOf(sc)} (${nameOf(sc)})`;
+      if (scs.length <= 1) throw new Error('The last scenario cannot be removed. Update it instead.');
+      remove(sc);
+      return { summary: `Removed scenario ${was}`, selected: LETTERS[sel], scenarios: scs.map((s) => ({ id: idOf(s), name: nameOf(s), landing: iso(s.spec.t) })) };
+    },
+  });
+  register({
+    name: 'scenario.select',
+    description: 'Select a scenario: the inspector, the 3D pins and the map follow it. Optionally open or close its editor pop-over. Returns the scenario with its metrics.',
+    schema: schema({ id: ID, editor: { type: 'boolean', description: 'true opens the editor pop-over for this scenario, false closes it. Leave out to keep it as it is.' } }, ['id']),
+    run: async ({ id, editor }: { id: string; editor?: boolean }) => {
+      const sc = scOf(id);
+      select(scs.indexOf(sc));
+      if (editor != null) setEditor(editor, byUser);
+      await settled(sc);
+      return { summary: `Selected scenario ${oneLine(sc)}`, scenario: describe(sc) };
+    },
+  });
+  register({
+    name: 'time.set',
+    description: 'Move the time scrubber to a number of hours after landing (0 to 707; it applies to every scenario) and pause playback. The 3D lighting and the horizon panorama follow. Returns the Sun and Earth state of each scenario at that moment.',
+    schema: schema({ hoursAfterLanding: num('Hours after landing, 0 to 707. Values outside are clamped.') }, ['hoursAfterLanding']),
+    run: async ({ hoursAfterLanding }: { hoursAfterLanding: number }) => {
+      setPlaying(false);
+      setHours(Math.round(hoursAfterLanding)); scrubAria(); saveHash();
+      return nowState();
+    },
+  });
+  register({
+    name: 'time.play',
+    description: 'Start playback: the scrubber sweeps one lunar day in about 15 seconds and loops until paused.',
+    schema: schema(),
+    run: async () => { setPlaying(true); return { playing }; },
+  });
+  register({
+    name: 'time.pause',
+    description: 'Pause playback. Returns the Sun and Earth state of each scenario at the time shown.',
+    schema: schema(),
+    run: async () => { setPlaying(false); return { playing, ...nowState() }; },
+  });
+  register({
+    name: 'slip.set',
+    description: 'Set the landing delay ("slip") in whole days, 0 to 60; 0 turns it off. Every scenario is recomputed at its landing time plus the delay. Waits for the results and returns each scenario with metrics.delayed next to the on-time metrics.',
+    schema: schema({ days: { type: 'integer', description: 'Days of delay, 0 to 60.' } }, ['days']),
+    run: async ({ days }: { days: number }) => {
+      if (!(days >= 0 && days <= 60)) throw new Error('days must be 0 to 60.');
+      await setSlip(days);
+      return { summary: days ? `Landing delayed by ${days} d` : 'Landing delay off', slipDays: slip, scenarios: scs.map(describe) };
+    },
+  });
+  register({
+    name: 'view.set',
+    description: 'Change what the stage shows: the 3D terrain or the 2D map, and on the map its region and colour overlay. Giving region or overlay switches to the map. Overlays (NASA average sunlight / Earth visibility) exist only for the south_pole region. The 3D view always shows the region of the selected scenario. Opens the mission tab if another tab is showing.',
+    schema: schema({
+      mode: { type: 'string', enum: ['3d', 'map'], description: 'Stage view.' },
+      region: { type: 'string', enum: Object.keys(MAP_REGION), description: 'Map region.' },
+      overlay: { type: 'string', enum: Object.keys(MAP_OVERLAY), description: 'Map overlay.' },
+    }),
+    run: async (a: { mode?: Mode; region?: keyof typeof MAP_REGION; overlay?: keyof typeof MAP_OVERLAY }) => {
+      const onMap = a.region != null || a.overlay != null;
+      if (onMap && a.mode === '3d') throw new Error('region and overlay apply to the map; leave them out with mode "3d".');
+      const region = a.region ?? (a.overlay && a.overlay !== 'terrain' ? 'south_pole' : undefined);
+      if (region === 'whole_moon' && a.overlay && a.overlay !== 'terrain') throw new Error('Overlays exist only for the south_pole region.');
+      if (view !== 'mission') await setView('mission');
+      const m = a.mode ?? (onMap ? 'map' : mode);
+      if (m !== mode) setMode(m);
+      if (region) map?.setMode(MAP_REGION[region]);
+      if (a.overlay) map?.setOverlay(MAP_OVERLAY[a.overlay]);
+      return { tab: tabNow(), view: viewState() };
+    },
+  });
+  register({
+    name: 'map.zoom',
+    description: `Zoom and pan the 2D map (switches the stage to the map). Use exactly one of: fit="scenarios" to frame every scenario with a margin (stays on the south-pole map when they all fit on it; the right call for "show all the points"); lat+lon and/or km_across to centre on a point and/or set how many km the view spans horizontally (south-pole map: ~0.5 to 600 km); factor to zoom relative to now (>1 zooms in, <1 out, e.g. 2 or 0.5). Prefer this over ${toolName('view.set')} region "whole_moon", which shows the entire Moon.`,
+    schema: schema({
+      fit: { type: 'string', enum: ['scenarios'], description: 'Frame all scenarios.' },
+      lat: { type: 'number', description: 'Centre latitude, degrees (needs lon).' },
+      lon: { type: 'number', description: 'Centre longitude, degrees east (needs lat).' },
+      km_across: { type: 'number', description: 'Horizontal span of the view in km.' },
+      factor: { type: 'number', description: 'Relative zoom: >1 in, <1 out.' },
+    }),
+    run: async (a: { fit?: 'scenarios'; lat?: number; lon?: number; km_across?: number; factor?: number }) => {
+      const point = a.lat != null || a.lon != null;
+      if (point && (a.lat == null || a.lon == null)) throw new Error('give both lat and lon.');
+      const kinds = [a.fit != null, point || a.km_across != null, a.factor != null].filter(Boolean).length;
+      if (kinds !== 1) throw new Error('use exactly one of: fit, lat+lon/km_across, factor.');
+      if (a.km_across != null && !(a.km_across > 0)) throw new Error('km_across must be > 0.');
+      if (a.factor != null && !(a.factor > 0)) throw new Error('factor must be > 0.');
+      if (view !== 'mission') await setView('mission');
+      if (mode !== 'map') setMode('map');
+      if (a.fit) map!.fit(scs.map((sc) => [sc.spec.lat, sc.spec.lon]));
+      else if (a.factor != null) map!.zoomBy(a.factor);
+      else map!.frame(a.lat, a.lon, a.km_across);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // let a first layout apply it
+      return { view: viewState() };
+    },
+  });
+  register({
+    name: 'tab.set',
+    description: 'Switch the page: "mission" (stage, inspector, timeline), "compare" (the side-by-side table of all scenarios, over the mission page) or "evidence" (validation against JPL Horizons, NASA maps and LRO photos).',
+    schema: schema({ tab: { type: 'string', enum: ['mission', 'compare', 'evidence'], description: 'Tab to show.' } }, ['tab']),
+    run: async ({ tab }: { tab: 'mission' | 'compare' | 'evidence' }) => {
+      const focus = byUser;
+      if (tab === 'evidence') { if (view !== 'evidence') await setView('evidence'); } // compare stays as it was, for coming back
+      else {
+        if (view !== 'mission') await setView('mission');
+        if (cmpOpen !== (tab === 'compare')) setCompare(tab === 'compare', focus);
+      }
+      return { tab: tabNow() };
+    },
+  });
+  setSnapshot(appState);
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__actions = { run, actions, snapshot, tools }; // console hook, dev server only
+}
+
 /* ------------------------------------------------------------------ shell */
 
 export async function start(root: HTMLElement) {
@@ -562,10 +923,15 @@ export async function start(root: HTMLElement) {
       </div>
     </header>
 
-    <aside class="rail" aria-label="Scenarios">
-      <div class="pane-head"><h2>Scenarios</h2><span id="count" class="lbl"></span></div>
-      <div id="cards"></div>
-      <button type="button" id="add" class="add">${ICON.plus}<span>Add scenario</span></button>
+    <aside class="rail" aria-label="Scenarios and assistant">
+      <div id="chips" class="chips" role="group" aria-label="Scenarios">
+        <button type="button" id="add" class="chip chip-add" aria-label="Add scenario" title="Add scenario">${ICON.plus}</button>
+      </div>
+      <div class="editor-anchor"><div id="editor" class="editor" role="dialog" aria-label="Edit scenario" hidden>
+        <div class="editor-head"><span class="lbl">Edit scenario</span><button type="button" id="editor-close" class="icon" aria-label="Close editor" title="Close (Esc)">${ICON.close}</button></div>
+        <div id="cards"></div>
+      </div></div>
+      <div id="agent" class="agent"></div>
     </aside>
 
     <main class="stage loading" data-mode="3d" aria-label="Terrain">
@@ -634,6 +1000,7 @@ export async function start(root: HTMLElement) {
   }
   $('.shell').classList.remove('boot');
   $('.stage').classList.remove('loading');
+  registerActions();
 
   const specs = loadHash();
   (specs.length ? specs : defaults()).forEach((s) => add(s, true));
@@ -646,44 +1013,33 @@ export async function start(root: HTMLElement) {
 
   // slip
   const slipIn = $<HTMLInputElement>('#slip');
-  const slipLabel = () => { $('#slipv').textContent = `${slip} d`; $('.shell').classList.toggle('has-slip', slip > 0); };
-  slipIn.value = String(slip); slipLabel();
-  let deb = 0;
-  slipIn.oninput = () => {
-    slip = +slipIn.value;
-    slipLabel();
-    paintStrip(); queueLanes(); // marker and lane layout move now, numbers after the debounce
-    clearTimeout(deb);
-    deb = window.setTimeout(() => {
-      for (const c of scs) void c.computeSlip();
-      paintInspector(); saveHash();
-    }, 120);
-  };
+  paintSlip();
+  slipIn.oninput = () => ui('slip.set', { days: +slipIn.value });
 
   // timeline
   const plot = $('#scrub');
   let drag = false;
-  const at = (e: PointerEvent) => { const r = plot.getBoundingClientRect(); setHours(hourAt(e.clientX - r.left, r.width)); };
+  const at = (e: PointerEvent) => { const r = plot.getBoundingClientRect(); ui('time.set', { hoursAfterLanding: hourAt(e.clientX - r.left, r.width) }); };
   plot.addEventListener('pointerdown', (e) => {
     if (e.button) return;
     drag = true; plot.setPointerCapture(e.pointerId);
-    setPlaying(false); at(e);
+    at(e);
   });
   plot.addEventListener('pointermove', (e) => { if (drag) at(e); });
-  const end = () => { if (drag) { drag = false; scrubAria(); saveHash(); } };
+  const end = () => { drag = false; };
   plot.addEventListener('pointerup', end); plot.addEventListener('pointercancel', end);
   plot.addEventListener('keydown', (e) => {
     const k = e.shiftKey ? 24 : 1;
     const to: Record<string, number> = { ArrowLeft: hours - k, ArrowDown: hours - k, ArrowRight: hours + k, ArrowUp: hours + k, Home: 0, End: STEPS - 1 };
-    if (e.key === ' ') { e.preventDefault(); return setPlaying(!playing); }
+    if (e.key === ' ') { e.preventDefault(); return ui(playing ? 'time.pause' : 'time.play'); }
     if (!(e.key in to)) return;
     e.preventDefault();
-    setPlaying(false); setHours(Math.round(to[e.key])); scrubAria(); saveHash();
+    ui('time.set', { hoursAfterLanding: to[e.key] });
   });
-  $('#play').onclick = () => setPlaying(!playing);
+  $('#play').onclick = () => ui(playing ? 'time.pause' : 'time.play');
   $('#lane-badges').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-lane]');
-    if (b) select(+b.dataset.lane!);
+    if (b) ui('scenario.select', { id: LETTERS[+b.dataset.lane!] });
   });
 
   // inspector
@@ -691,20 +1047,26 @@ export async function start(root: HTMLElement) {
   strip.onclick = (e) => {
     const sc = cur();
     if (!sc.strip) return;
-    sc.spec.t = clampT(Math.round(stripTimeAt(strip, sc.strip, e.clientX) / 3600e3) * 3600e3);
-    changed(sc);
+    ui('scenario.update', { id: LETTERS[sel], t: iso(Math.round(stripTimeAt(strip, sc.strip, e.clientX) / 3600e3) * 3600e3) });
   };
 
   // chrome
-  $('#add').onclick = () => add({ ...cur().spec });
-  for (const b of document.querySelectorAll<HTMLElement>('.views [data-view]')) b.onclick = () => setView(b.dataset.view as View);
-  for (const b of document.querySelectorAll<HTMLElement>('.stage-switch [data-mode]')) b.onclick = () => setMode(b.dataset.mode as Mode);
-  $('#cmp').onclick = () => setCompare(!cmpOpen);
-  $('#cmp-close').onclick = () => setCompare(false);
+  const toggleCompare = () => ui('tab.set', { tab: cmpOpen ? 'mission' : 'compare' });
+  $('#add').onclick = () => ui('scenario.add');
+  $('#editor-close').onclick = () => ui('scenario.select', { id: LETTERS[sel], editor: false });
+  document.addEventListener('pointerdown', (e) => { // a click elsewhere in the rail closes the pop-over (the stage stays usable with it open)
+    const t = e.target as HTMLElement;
+    if (editorOpen && t.closest?.('.rail') && !t.closest('#editor, #chips')) ui('scenario.select', { id: LETTERS[sel], editor: false });
+  });
+  for (const b of document.querySelectorAll<HTMLElement>('.views [data-view]')) b.onclick = () => ui('tab.set', { tab: b.dataset.view === 'mission' && cmpOpen ? 'compare' : b.dataset.view }); // Mission keeps compare open
+  for (const b of document.querySelectorAll<HTMLElement>('.stage-switch [data-mode]')) b.onclick = () => ui('view.set', { mode: b.dataset.mode });
+  $('#cmp').onclick = toggleCompare;
+  $('#cmp-close').onclick = toggleCompare;
+  mountAgent($('#agent'), { sites });
   const copy = $('#copy');
   let copyTimer = 0;
   copy.onclick = async () => {
-    saveHash();
+    writeHash(); // not an action: copies the link, changes nothing
     let ok = true;
     try { await navigator.clipboard.writeText(location.href); } catch { ok = false; }
     copy.textContent = ok ? 'Link copied' : 'Copy from the address bar';
@@ -713,13 +1075,13 @@ export async function start(root: HTMLElement) {
   };
   window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === 'Escape' && cmpOpen) return setCompare(false);
+    if (e.key === 'Escape' && editorOpen) return ui('scenario.select', { id: LETTERS[sel], editor: false });
+    if (e.key === 'Escape' && cmpOpen && view === 'mission') return toggleCompare();
     if ((e.target as HTMLElement).closest?.('input, select, textarea')) return;
-    if (e.key === 'c' && view === 'mission') setCompare(!cmpOpen);
+    if (e.key === 'c' && view === 'mission') toggleCompare();
   });
 
   setHours(hours); scrubAria();
-  if (sel) cards.get(cur())?.scrollIntoView({ block: 'nearest' });
   if (cmpOpen) setCompare(true);
   void setView(view);
 

@@ -30,8 +30,10 @@
 .pane .lmap-bar > * { pointer-events: auto; }
 .pane .lmap-stage { position: absolute; inset: 0; border: 0; border-radius: 0; }
 .pane .lmap-canvas { height: 100%; }
-.pane .lmap-readout { position: absolute; left: 12px; bottom: 36px; max-width: calc(100% - 24px); margin: 0; min-height: 0; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pane .lmap-err { position: absolute; left: 12px; bottom: 68px; margin: 0; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+/* Legend, error and readout stack up from the bottom-left, clear of the stage note at the top. */
+.pane .lmap-foot { position: absolute; left: 12px; right: 12px; bottom: 36px; z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+.pane .lmap-readout { max-width: 100%; margin: 0; min-height: 0; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane .lmap-err { margin: 0; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 @media (max-width: 1099px) {
   .lmap-seg button { height: 32px; }
   .lmap-zoom button { width: 32px; }

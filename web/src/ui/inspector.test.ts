@@ -32,7 +32,7 @@ describe('action registry', () => {
       expect(() => JSON.stringify(s)).not.toThrow();
     }
     expect(actions.get('inspector.details')!.schema.required).toEqual(['open']);
-    const c = actions.get('chart.set')!.schema.properties as Record<string, { enum: unknown[] }>;
+    const c = actions.get('chart.set')!.schema.properties as unknown as Record<string, { enum: unknown[] }>;
     expect(c.metric.enum).toEqual(['power', 'elevation']);
     expect(c.durationDays.enum).toEqual([7, 14, 29.5]);
   });
