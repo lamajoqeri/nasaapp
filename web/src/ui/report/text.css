@@ -1,0 +1,16 @@
+/* Method and context sections (text.ts). Equations are numbered within Methods by a CSS counter. */
+.report #r-methods { counter-reset: eq; }
+.report .r-eq { counter-increment: eq; display: grid; grid-template-columns: 2.5em minmax(0, 1fr) 2.5em; align-items: baseline; margin: 14px 0; font-size: 15px; }
+.report .r-eq::before { content: ''; }
+.report .r-eq span { text-align: center; }
+.report .r-eq::after { content: '(' counter(eq) ')'; text-align: right; color: #4a4f57; }
+.report .r-eq sub, .report .r-eq sup { font-size: 0.72em; }
+.report #r-data code, .report #r-methods code { font: 0.86em ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+.report :is(#r-intro, #r-data, #r-methods, #r-limits) p:not(.r-eq) { margin: 0 0 12px; }
+.report :is(#r-data, #r-methods) h3 { font-size: 18px; margin: 24px 0 8px; }
+.report .r-datatab th[scope='row'] { font-weight: 600; width: 30%; }
+.report .r-link { word-break: break-all; }
+.report .r-refs { list-style: none; counter-reset: ref; padding: 0; font-size: 14px; }
+.report .r-refs li { counter-increment: ref; position: relative; padding-left: 2.6em; margin: 6px 0; }
+.report .r-refs li::before { content: '[' counter(ref) ']'; position: absolute; left: 0; }
+.report .r-refs a { word-break: break-all; color: #2a5db0; }
