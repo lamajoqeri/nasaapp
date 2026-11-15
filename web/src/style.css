@@ -359,16 +359,11 @@ button.mini:hover:not(:disabled) { color: var(--fg); }
 .c-read .rv i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
 .c-read .rv b { font-weight: 400; }
 #c-read { margin-bottom: 4px; }
-#w-read { margin-top: 4px; word-spacing: -0.2em; text-overflow: ellipsis; display: block; }
-#w-read.quiet { color: var(--faint); font-family: var(--sans); word-spacing: 0; }
 canvas.chart { height: 156px; }
-canvas.chart, canvas.wins { border: 1px solid var(--line); cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+canvas.chart { border: 1px solid var(--line); cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 #c-note { margin-top: 6px; min-height: 69px; } /* four lines for either metric: switching never moves what is below */
 .c-legend .dash { font-weight: 400; word-spacing: -0.3em; }
 .c-legend .dash i { height: 0; width: 14px; border-top: 1px dashed; background: none; }
-.w-legend { display: flex; gap: 12px; margin-bottom: 6px; font-size: 11.5px; line-height: 16px; color: var(--muted); white-space: nowrap; }
-.w-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.sw.dsn { background: #b9d5fb; }
 
 .verdicts { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); }
 .verdicts > div { padding: 6px 8px 7px; min-width: 0; }

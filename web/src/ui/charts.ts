@@ -22,37 +22,12 @@ export const METRICS: readonly Metric[] = ['power', 'elevation'];
 export const DURATIONS = [7, 14, 29.5] as const;
 export type DurationDays = (typeof DURATIONS)[number];
 
-const BG = '#0a0b0d', FG = '#e8e6e1', MUTED = '#8e939c', FAINT = '#686d77', TRACK = '#14171b';
+const BG = '#0a0b0d', FG = '#e8e6e1', MUTED = '#8e939c', FAINT = '#686d77';
 const GRID = 'rgba(232,230,225,0.08)', AXIS = '#343a44';
 export const SUN = '#f2b544', EARTH = '#5b9cf5', DSN = '#b9d5fb';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 /* ------------------------------------------------------------------ pure maths */
-
-export interface Window { start: number; end: number }
-
-/** Runs of truthy samples as [start, end) in hours. Sample i covers [i, i + 1) * stepHours. */
-export function windows(mask: ArrayLike<number>, stepHours = 1): Window[] {
-  const out: Window[] = [];
-  let s = -1;
-  for (let i = 0; i <= mask.length; i++) {
-    const on = i < mask.length && mask[i] > 0;
-    if (on && s < 0) s = i;
-    if (!on && s >= 0) { out.push({ start: s * stepHours, end: i * stepHours }); s = -1; }
-  }
-  return out;
-}
-
-/** The run of equal truthiness that contains sample i: [start, end) in samples, and whether it is an "on" run. */
-export function runAt(mask: ArrayLike<number>, i: number): { start: number; end: number; on: boolean } | null {
-  const n = mask.length;
-  if (!n || !(i >= 0 && i < n)) return null;
-  const on = mask[i] > 0;
-  let a = i, b = i + 1;
-  while (a > 0 && mask[a - 1] > 0 === on) a--;
-  while (b < n && mask[b] > 0 === on) b++;
-  return { start: a, end: b, on };
-}
 
 /** Smallest of 1, 2, 5 x 10^k that is >= raw. */
 export function niceStep(raw: number): number {
@@ -175,33 +150,6 @@ export function commsVerdict(s: Pick<Series, 't' | 'stepMs' | 'earthVis'>, missi
     : { level: 'gaps', label: 'Gaps', detail, basis, longestGapHours: gap };
 }
 
-/* ---- windows bar ---- */
-
-export const WINDOW_ROWS = ['Sunlit', 'Earth in view', 'DSN contact'] as const;
-const OFF_NAMES = ['Dark', 'Earth hidden', 'No DSN contact'];
-
-/** The mask a windows row draws; null for the DSN row when no station table covers the dates. */
-export function rowMask(r: ScenarioResult, row: number): ArrayLike<number> | null {
-  if (row === 0) return r.series.sunFrac;
-  if (row === 1) return r.series.earthVis;
-  return r.mission.commsHours === null ? null : contactMask(r.series, r.mission);
-}
-
-const dayNo = (h: number) => (h / 24).toFixed(1);
-
-/** "Sunlit for 6 d 13 h, ends day 6.5" for the run under the cursor; runs are measured on the whole 29.5 d series. */
-export function windowText(row: number, run: { start: number; end: number; on: boolean }, total: number, stepHours = 1): string {
-  const name = run.on ? WINDOW_ROWS[row] : OFF_NAMES[row];
-  const a = run.start * stepHours, b = run.end * stepHours, len = dur(b - a);
-  if (run.start === 0 && run.end >= total) return `${name} for all ${days(total * stepHours)}`;
-  if (run.end >= total) return `${name} for ${len} from day ${dayNo(a)}, continues past day ${dayNo(b)}`;
-  return `${name} for ${len}, ends day ${dayNo(b)}`;
-}
-
-export const WIN = { row: 6, gap: 2, pitch: 30, top: 6, axis: 20 };
-const GROUP_H = 3 * WIN.row + 2 * WIN.gap;
-export const windowsHeight = (n: number) => WIN.top + Math.max(1, n) * WIN.pitch - (WIN.pitch - GROUP_H) + 4 + WIN.axis;
-
 /* ---- shared plot geometry ---- */
 
 export const PAD = { l: 34, r: 12, t: 9, b: 20 };
@@ -212,13 +160,6 @@ export function hourAtX(x: number, width: number, durationDays: number): number 
   return Math.min(STEPS - 1, Math.min(1, Math.max(0, (x - PAD.l) / pw)) * durationDays * 24);
 }
 export const xAtHour = (h: number, width: number, durationDays: number) => PAD.l + (h / (durationDays * 24)) * (width - PAD.l - PAD.r);
-
-/** Which scenario group and row a point of the windows bar is in; null between rows. */
-export function windowsHit(y: number, count: number): { scenario: number; row: number } | null {
-  const g = Math.floor((y - WIN.top) / WIN.pitch), dy = y - WIN.top - g * WIN.pitch;
-  if (g < 0 || g >= count || dy < -1 || dy > GROUP_H + 1) return null;
-  return { scenario: g, row: Math.min(2, Math.max(0, Math.floor(dy / (WIN.row + WIN.gap)))) };
-}
 
 /* ---- readout ---- */
 
@@ -437,61 +378,3 @@ export function drawChartOverlay(g: G, sc: ChartScale, m: ChartModel, play: numb
   }
 }
 
-/** The static layer of the windows bar: per scenario, rows for sunlight, Earth in view and DSN contact. */
-export function drawWindows(g: G, W: number, H: number, m: ChartModel) {
-  const left = PAD.l, right = W - PAD.r, pw = right - left;
-  const durH = m.durationDays * 24;
-  g.fillStyle = BG; g.fillRect(0, 0, W, H);
-  if (pw < 40) return;
-  const X = (h: number) => left + (Math.min(h, durH) / durH) * pw;
-  const axisY = H - WIN.axis;
-
-  m.items.forEach((it, k) => {
-    const y0 = WIN.top + k * WIN.pitch, on = k === m.selected;
-    g.font = `600 11px ${MONO}`; g.textAlign = 'left'; g.textBaseline = 'middle';
-    g.fillStyle = it.color; g.globalAlpha = on ? 1 : 0.8;
-    g.fillText(it.letter, 6, y0 + GROUP_H / 2 + 0.5);
-    g.globalAlpha = 1;
-    if (on) { g.fillStyle = it.color; g.fillRect(left - 7, y0, 2, GROUP_H); }
-    for (let row = 0; row < 3; row++) {
-      const y = y0 + row * (WIN.row + WIN.gap);
-      const mask = it.result ? rowMask(it.result, row) : undefined;
-      if (mask === null) { // Apollo-era dates
-        g.font = `9px ${MONO}`; g.fillStyle = FAINT; g.textBaseline = 'middle';
-        g.fillText('no station data', left + 1, y + WIN.row / 2 + 0.5);
-        continue;
-      }
-      g.fillStyle = TRACK; g.fillRect(left, y, pw, WIN.row);
-      if (!mask) continue;
-      const n = Math.min(mask.length, Math.ceil(durH));
-      if (row === 0) { // sunlight: one column per CSS pixel, dimmer where only part of the disk shows
-        g.fillStyle = SUN;
-        for (let x = 0; x < pw; x++) {
-          const i0 = Math.min(n - 1, Math.floor((x / pw) * durH)), i1 = Math.min(n, Math.max(i0 + 1, Math.floor(((x + 1) / pw) * durH)));
-          let s = 0;
-          for (let i = i0; i < i1; i++) s += mask[i];
-          if (s <= 0) continue;
-          g.globalAlpha = 0.28 + 0.72 * Math.min(1, s / (i1 - i0));
-          g.fillRect(left + x, y, 1, WIN.row);
-        }
-        g.globalAlpha = 1;
-      } else {
-        g.fillStyle = row === 1 ? EARTH : DSN;
-        for (const w of windows(Array.prototype.slice.call(mask, 0, n) as number[])) {
-          const a = Math.round(X(w.start)), b = Math.max(a + 1, Math.round(X(w.end)));
-          g.fillRect(a, y, Math.min(b, right) - a, WIN.row);
-        }
-      }
-    }
-  });
-  dayAxis(g, W, axisY, m.durationDays);
-}
-
-/** Shared playhead and the hover line. */
-export function drawWindowsOverlay(g: G, W: number, H: number, m: ChartModel, play: number, hover: number | null) {
-  const durH = m.durationDays * 24, bottom = H - WIN.axis;
-  if (W - PAD.l - PAD.r < 40) return;
-  if (play <= durH) playhead(g, xAtHour(play, W, m.durationDays), WIN.top - 4, bottom);
-  else beyond(g, W - PAD.r - 10, WIN.top - 5);
-  if (hover !== null) crosshair(g, xAtHour(hover, W, m.durationDays), WIN.top - 4, bottom);
-}

@@ -1,4 +1,4 @@
-// Right inspector (docs/V2-DESIGN.md section 4): horizon panorama, power / Sun-elevation chart, windows bar,
+// Right inspector (docs/V2-DESIGN.md section 4): horizon panorama, power / Sun-elevation chart,
 // viability badges, the status sentence, and the raw figures behind a Details button.
 //
 // State lives at module level and changes only through the registered actions (`chart.set`,
@@ -8,8 +8,8 @@ import type { ScenarioResult } from '../core/api';
 import { DSN_NAMES } from '../core/extra';
 import { actions, register, type Action } from './actions';
 import {
-  chartValues, commsVerdict, drawChart, drawChartOverlay, drawWindows, drawWindowsOverlay, DURATIONS, formatValue, hourAtX,
-  LETTERS, METRICS, Plot, powerPct, powerVerdict, rowMask, runAt, samplesIn, SCENARIO_COLORS, windowsHeight, windowsHit, windowText,
+  chartValues, commsVerdict, drawChart, drawChartOverlay, DURATIONS, formatValue, hourAtX,
+  LETTERS, METRICS, Plot, powerPct, powerVerdict, samplesIn, SCENARIO_COLORS,
   type ChartModel, type ChartScale, type CommsVerdict, type DurationDays, type Metric, type PowerVerdict,
 } from './charts';
 import { caption, coord, DAY, delta, dur, isoMin, type Row } from './format';
@@ -224,7 +224,7 @@ const MARKUP = `
         <button type="button" id="i-sky" class="mini" aria-haspopup="dialog" title="Open the all-sky view from this site">${ICON.sky}<span>Sky</span></button></div>
       <canvas id="i-pano" class="pano" role="img" aria-label="Horizon panorama: terrain silhouette with the paths of the Sun and Earth"></canvas>
       <dl class="now">
-        <div title="Elevation of the Sun's centre above a level horizon. From a mast on high ground the real horizon can sit below level, so a Sun slightly below 0° can still be visible; terrain can also hide a Sun above 0°."><dt>Sun elevation (vs level)</dt><dd id="n-el">–</dd></div>
+        <div title="Elevation of the Sun's centre above a level horizon. From a mast on high ground the real horizon can sit below level, so a Sun slightly below 0° can still be visible; terrain can also hide a Sun above 0°."><dt>Sun angle</dt><dd id="n-el">–</dd></div>
         <div><dt>Disk visible</dt><dd id="n-disk">–</dd></div>
         <div title="Share of terrain-model draws in which some of the Sun is visible"><dt>Chance lit</dt><dd id="n-plit">–</dd></div>
         <div><dt>Earth</dt><dd id="n-earth">–</dd></div>
@@ -245,13 +245,6 @@ const MARKUP = `
       <div class="sec-head"><h3 class="lbl" id="c-title"></h3><div id="c-legend" class="c-legend" aria-label="Scenario colours"></div></div>
       <p id="c-read" class="c-read"></p>
       <canvas id="c-chart" class="chart" role="img" aria-label="Chart"></canvas>
-    </section>
-
-    <section>
-      <div class="sec-head wrap"><h3 class="lbl">Windows over the mission</h3>
-        <div class="w-legend"><span><i class="sw sun"></i>Sunlit</span><span><i class="sw earth"></i>Earth in view</span><span><i class="sw dsn"></i>DSN contact</span></div></div>
-      <canvas id="c-win" class="wins" role="img" aria-label="Windows"></canvas>
-      <p id="w-read" class="c-read"></p>
     </section>
 
     <section class="via">
@@ -288,14 +281,13 @@ export interface InspectorHandle {
   paintNow(): void;
   /** The 12-month strip (its landing and delay markers). */
   paintStrip(): void;
-  /** Any scenario changed, was added or removed: the charts, the windows bar and the all-scenarios verdicts. */
+  /** Any scenario changed, was added or removed: the chart and the all-scenarios verdicts. */
   paintAll(): void;
   /** Layout changed: redraw the canvases at their new size. */
   resize(): void;
 }
 
 const TITLES: Record<Metric, string> = { power: 'Solar power, % of rated', elevation: 'Sun above terrain, deg' };
-const WIN_HINT = '\u00a0'; // empty readout line keeps its height until a bar is hovered
 
 export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHandle {
   bindInspector(d);
@@ -303,16 +295,13 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
   const $ = <T extends Element = HTMLElement>(s: string) => el.querySelector(s) as T;
   const cur = () => d.scenarios()[d.selected()] as Scenario | undefined;
 
-  let lastIdx = -1, lastRead = '', hover: number | null = null, hoverWin: { scenario: number; row: number } | null = null;
+  let lastIdx = -1, lastRead = '', hover: number | null = null;
   let scale: ChartScale | undefined, model: ChartModel = { metric: state.metric, durationDays: state.durationDays, items: [], selected: 0 };
   let readCells: HTMLElement[] = [], readCount = -1;
 
   const chart = new Plot($<HTMLCanvasElement>('#c-chart'),
     (g, W, H) => { scale = drawChart(g, W, H, model); },
     (g) => { if (scale) drawChartOverlay(g, scale, model, d.hours(), hover); });
-  const wins = new Plot($<HTMLCanvasElement>('#c-win'),
-    (g, W, H) => drawWindows(g, W, H, model),
-    (g, W, H) => drawWindowsOverlay(g, W, H, model, d.hours(), hover));
 
   const buildModel = () => {
     const slip = d.slip();
@@ -369,7 +358,6 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
       $('#c-read').innerHTML = '<span class="rt"></span>' + d.scenarios().map((_, i) => `<span class="rv"><i style="background:${SCENARIO_COLORS[i]}"></i><b></b></span>`).join('');
       readCells = [$('#c-read .rt'), ...el.querySelectorAll<HTMLElement>('#c-read .rv b')];
       lastRead = '';
-      $<HTMLCanvasElement>('#c-win').style.height = `${windowsHeight(n)}px`;
     }
     const letters = d.scenarios().map((_, i) => LETTERS[i]).join(', '), days = `${state.durationDays} days after landing`;
     const sel = cur()?.base;
@@ -383,7 +371,6 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     $('#c-chart').setAttribute('aria-label', state.metric === 'power'
       ? `Line chart: available solar power as a percentage of rated panel output over the ${days}, one line per scenario (${letters}).${extra}`
       : `Line chart: Sun elevation above the terrain horizon in degrees over the ${days}, one line per scenario (${letters}).${extra}`);
-    $('#c-win').setAttribute('aria-label', `Bars showing when each scenario (${letters}) is sunlit, has Earth in view and has Deep Space Network contact over the ${days}.`);
   }
 
   /** Readout row: values under the cursor, or at the playhead when the pointer is elsewhere. */
@@ -397,26 +384,13 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     chartValues(model, idx).forEach((v, i) => { if (readCells[i + 1]) readCells[i + 1].textContent = v === null ? '–' : formatValue(model.metric, v); });
   }
 
-  function paintWinRead() {
-    const out = $('#w-read');
-    let text = WIN_HINT, quiet = true;
-    const it = hoverWin && hover !== null ? model.items[hoverWin.scenario] : undefined;
-    if (it?.result && hoverWin && hover !== null) {
-      const mask = rowMask(it.result, hoverWin.row);
-      const run = mask ? runAt(mask, Math.min(mask.length - 1, Math.floor(hover))) : null;
-      text = `${it.letter} · ${mask === null ? 'No station data for these dates' : run ? windowText(hoverWin.row, run, mask!.length, it.result.series.stepMs / 3600e3) : ''}`;
-      quiet = false;
-    }
-    if (out.textContent !== text) { out.textContent = text; out.classList.toggle('quiet', quiet); }
-  }
-
   function paintAll() {
     buildModel();
     paintLegend();
     paintVerdicts();
-    chart.invalidate(); wins.invalidate();
+    chart.invalidate();
     lastRead = '';
-    chart.render(); wins.render();
+    chart.render();
     paintRead();
     for (const f of painted) f('all');
   }
@@ -461,7 +435,7 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
         $('#n-dsn').textContent = r.dsn;
       }
     }
-    chart.render(); wins.render();
+    chart.render();
     paintRead();
     for (const f of painted) f('now');
   }
@@ -493,15 +467,14 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
 
   /* ---- pointer: hover readout, click or drag to scrub ---- */
 
-  const attach = (cv: HTMLCanvasElement, isWin: boolean) => {
+  const attach = (cv: HTMLCanvasElement) => {
     let drag = false;
     const hourOf = (e: PointerEvent) => {
       const r = cv.getBoundingClientRect();
       const h = hourAtX(e.clientX - r.left - cv.clientLeft, cv.clientWidth, state.durationDays);
-      hoverWin = isWin ? windowsHit(e.clientY - r.top - cv.clientTop, model.items.length) : null;
       return h;
     };
-    const show = () => { chart.render(); wins.render(); paintRead(); paintWinRead(); };
+    const show = () => { chart.render(); paintRead(); };
     cv.addEventListener('pointerdown', (e) => {
       if (e.button) return;
       drag = true; cv.setPointerCapture(e.pointerId);
@@ -517,18 +490,17 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     const end = (e: PointerEvent) => {
       if (!drag) return;
       drag = false; d.save();
-      if (e.pointerType !== 'mouse') { hover = null; hoverWin = null; show(); } // touch has no hover to keep
+      if (e.pointerType !== 'mouse') { hover = null; show(); } // touch has no hover to keep
     };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
-    cv.addEventListener('pointerleave', () => { if (!drag) { hover = null; hoverWin = null; show(); } });
+    cv.addEventListener('pointerleave', () => { if (!drag) { hover = null; show(); } });
   };
-  attach(chart.canvas, false); attach(wins.canvas, true);
+  attach(chart.canvas);
 
-  const ro = new ResizeObserver(() => { chart.render(); wins.render(); });
+  const ro = new ResizeObserver(() => { chart.render(); });
   ro.observe(chart.canvas);
 
   sync();
-  paintWinRead();
 
   return {
     paint, paintHead, paintNow, paintStrip, paintAll,

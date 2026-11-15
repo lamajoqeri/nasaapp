@@ -2,7 +2,7 @@ import { describe, expect, it, test } from 'vitest';
 import { horizonAt } from '../core/geom';
 import {
   chartValues, commsVerdict, contactMask, dayTicks, DURATIONS, elevationRange, formatValue, hourAtX, niceStep, niceTicks, PAD,
-  powerPct, powerVerdict, rowMask, runAt, samplesIn, SCENARIO_COLORS, sunClearance, WIN, windows, windowsHeight, windowsHit, windowText, xAtHour,
+  powerPct, powerVerdict, samplesIn, SCENARIO_COLORS, sunClearance, xAtHour,
 } from './charts';
 import { realResult } from './test-fixture';
 
@@ -11,41 +11,6 @@ const ser = (sunFrac: number[], earthVis: number[] = sunFrac.map(() => 1)) => ({
   t: Float64Array.from(sunFrac, (_, i) => i * H), stepMs: H, sunFrac: Float32Array.from(sunFrac), earthVis: Uint8Array.from(earthVis),
 });
 const rep = (v: number, n: number) => Array<number>(n).fill(v);
-
-describe('windows', () => {
-  it('merges adjacent samples into [start, end) hours', () => {
-    expect(windows([0, 1, 1, 0, 1, 0])).toEqual([{ start: 1, end: 3 }, { start: 4, end: 5 }]);
-  });
-  it('keeps windows that are open at either edge', () => {
-    expect(windows([1, 1, 0, 0, 1])).toEqual([{ start: 0, end: 2 }, { start: 4, end: 5 }]);
-  });
-  it('handles empty, all-off and all-on masks', () => {
-    expect(windows([])).toEqual([]);
-    expect(windows([0, 0, 0])).toEqual([]);
-    expect(windows([1, 1, 1])).toEqual([{ start: 0, end: 3 }]);
-  });
-  it('treats any positive fraction as on, and scales by the step', () => {
-    expect(windows(Float32Array.of(0, 0.01, 0.6, 0), 0.5)).toEqual([{ start: 0.5, end: 1.5 }]);
-    expect(windows(Uint8Array.of(1, 0, 1), 2)).toEqual([{ start: 0, end: 2 }, { start: 4, end: 6 }]);
-  });
-});
-
-describe('runAt', () => {
-  it('finds the on or off run around a sample', () => {
-    const m = [1, 1, 0, 0, 0, 1];
-    expect(runAt(m, 0)).toEqual({ start: 0, end: 2, on: true });
-    expect(runAt(m, 3)).toEqual({ start: 2, end: 5, on: false });
-    expect(runAt(m, 5)).toEqual({ start: 5, end: 6, on: true });
-    expect(runAt(m, 6)).toBeNull();
-    expect(runAt([], 0)).toBeNull();
-  });
-  it('window text names the run, its length and its end', () => {
-    expect(windowText(0, { start: 0, end: 157, on: true }, 708)).toBe('Sunlit for 6 d 13 h, ends day 6.5');
-    expect(windowText(0, { start: 157, end: 181, on: false }, 708)).toBe('Dark for 24 h, ends day 7.5');
-    expect(windowText(1, { start: 0, end: 708, on: true }, 708)).toBe('Earth in view for all 29.5 d');
-    expect(windowText(2, { start: 600, end: 708, on: false }, 708)).toBe('No DSN contact for 4 d 12 h from day 25.0, continues past day 29.5');
-  });
-});
 
 describe('ticks', () => {
   it('niceStep rounds up to 1, 2 or 5 times a power of ten', () => {
@@ -76,14 +41,6 @@ describe('plot geometry', () => {
     expect(hourAtX(9999, 352, 29.5)).toBe(707);              // never past the last series sample
     expect(xAtHour(0, 352, 7)).toBe(PAD.l);
     expect(xAtHour(168, 352, 7)).toBe(352 - PAD.r);
-  });
-  it('windowsHit maps y to a scenario group and one of three rows', () => {
-    expect(windowsHit(WIN.top + 1, 2)).toEqual({ scenario: 0, row: 0 });
-    expect(windowsHit(WIN.top + WIN.row + WIN.gap + 1, 2)).toEqual({ scenario: 0, row: 1 });
-    expect(windowsHit(WIN.top + WIN.pitch + 2 * (WIN.row + WIN.gap) + 2, 2)).toEqual({ scenario: 1, row: 2 });
-    expect(windowsHit(WIN.top + WIN.pitch - 3, 2)).toBeNull();   // the gap between groups
-    expect(windowsHit(WIN.top + 2 * WIN.pitch + 1, 2)).toBeNull(); // below the last group
-    expect(windowsHeight(4)).toBeGreaterThan(windowsHeight(2));
   });
   it('formats readout values', () => {
     expect(formatValue('power', 99.6)).toBe('100%');
@@ -209,15 +166,10 @@ test('series extraction on a real scenario (Connecting Ridge, 2027-06-20)', asyn
   expect(Math.max(...c)).toBeLessThan(6);           // a polar site: fits the default ±6° range
   expect(elevationRange([c], 336)).toMatchObject({ lo: -6, hi: 6 });
 
-  // windows bar rows, and the sum of sunlit windows equals the lit hours
-  expect(rowMask(r, 0)).toBe(s.sunFrac);
-  expect(rowMask(r, 1)).toBe(s.earthVis);
-  const dsn = rowMask(r, 2)!;
+  // DSN contact mask: the same count the Details table shows
+  const dsn = contactMask(s, r.mission);
   expect(dsn.length).toBe(708);
-  expect(windows(s.sunFrac).reduce((a, w) => a + w.end - w.start, 0)).toBe(lit);
-  const contact = Array.from(dsn).reduce((a, b) => a + b, 0);
-  expect(contact).toBe(r.mission.commsHours);       // the same count the Details table shows
-  expect(rowMask({ ...r, mission: { ...r.mission, commsHours: null } }, 2)).toBeNull();
+  expect(Array.from(dsn).reduce((a, b) => a + b, 0)).toBe(r.mission.commsHours);
 
   // uncertainty band brackets nothing impossible and the verdicts agree with the app's own battery result
   const u = r.uncertainty!;
