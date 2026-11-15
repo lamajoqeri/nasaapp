@@ -1,6 +1,6 @@
 // Agent panel: key form or chat thread. Streaming text, one line per tool call, suggested prompts, stop.
 import type Anthropic from '@anthropic-ai/sdk';
-import { createClient, explain, mountAuth, ready, SIGN_OUT_LABEL, signOut } from './client';
+import { createClient, explain, mountAuth, proxied, ready, SIGN_OUT_LABEL, signOut } from './client';
 import { runTurn } from './loop';
 import { systemPrompt, type PromptSite } from './prompt';
 
@@ -34,7 +34,7 @@ export function mountAgent(root: HTMLElement, opts: { sites: PromptSite[] }): vo
       <div class="agent-foot">
         <span class="lbl quiet">Claude operates the app.</span>
         <button type="button" class="link" data-do="new">New chat</button>
-        <button type="button" class="link" data-do="out">${SIGN_OUT_LABEL}</button>
+        ${proxied() ? '' : `<button type="button" class="link" data-do="out">${SIGN_OUT_LABEL}</button>`}
       </div>`;
     const thread = root.querySelector<HTMLElement>('.thread')!, form = root.querySelector('form')!;
     const input = root.querySelector('textarea')!, btn = root.querySelector<HTMLButtonElement>('.send')!;

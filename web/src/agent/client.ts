@@ -1,6 +1,8 @@
-// Auth and client construction. Phase 1: the user pastes their own API key, kept in localStorage only
-// (never the URL, the hash or any server but api.anthropic.com). Phase 2 (OAuth or a proxy) swaps this file only:
-// the rest of the agent uses ready(), mountAuth(), signOut(), createClient() and explain().
+// Auth and client construction. Where the site serves the function in web/api (on Vercel), calls go through it with
+// the owner's key and the visitor needs none. Elsewhere (GitHub Pages, vite dev) the probe fails and the user pastes
+// their own API key, kept in localStorage only (never the URL, the hash or any server but api.anthropic.com). A key
+// already stored (or the dev key) wins: the probe only runs when there is none.
+// The rest of the agent uses ready(), proxied(), mountAuth(), signOut(), createClient() and explain().
 import type Anthropic from '@anthropic-ai/sdk';
 
 export const MODEL = 'claude-opus-5-5';
@@ -19,14 +21,27 @@ function key(): string {
   const fallback = mem || (forgotten ? '' : DEV_KEY);
   try { return localStorage.getItem(KEY) ?? fallback; } catch { return fallback; }
 }
-export const ready = () => !!key();
+const PROXY = () => new URL('api', document.baseURI).href; // the SDK appends /v1/messages
+let proxy = false;
+let probe: Promise<boolean> | undefined;
+const hasProxy = () => (probe ??= fetch(`${PROXY()}/v1/messages`)
+  .then(async (r) => r.ok && (await r.json()).ok === true) // vite dev answers with the file as JS: not JSON, so false
+  .catch(() => false));
+
+export const ready = () => proxy || !!key();
+/** True when the site's proxy holds the key: nothing to forget. */
+export const proxied = () => proxy;
 export function signOut(): void {
   mem = ''; forgotten = true;
   try { localStorage.removeItem(KEY); } catch { /* nothing stored */ }
 }
 
-/** Render the sign-in UI into `el`; calls `done` once credentials exist. */
+/** Render the sign-in UI into `el`; calls `done` once credentials exist. Skips the form when the site has a proxy. */
 export function mountAuth(el: HTMLElement, done: () => void): void {
+  void hasProxy().then((ok) => { if (ok) { proxy = true; done(); } else keyForm(el, done); });
+}
+
+function keyForm(el: HTMLElement, done: () => void): void {
   el.innerHTML = `
     <form class="keyform">
       <p><b>Ask Claude to plan with you.</b> The assistant can add and move scenarios, change dates and read the results.
@@ -54,16 +69,20 @@ const load = () => (sdk ??= import('@anthropic-ai/sdk')); // lazy: the SDK stays
 
 export async function createClient(): Promise<Anthropic> {
   const { default: Client } = await load();
-  return new Client({ apiKey: key(), baseURL: 'https://api.anthropic.com', dangerouslyAllowBrowser: true });
+  // The SDK insists on a key; the proxy drops it and adds the owner's.
+  return new Client({ apiKey: proxy ? 'proxy' : key(), baseURL: proxy ? PROXY() : 'https://api.anthropic.com', dangerouslyAllowBrowser: true });
 }
 
 /** A failure as a sentence for the thread. `auth`: the credentials were rejected. `aborted`: the user pressed stop. */
 export async function explain(e: unknown): Promise<{ text: string; auth?: boolean; aborted?: boolean }> {
   const A = (await load()).default;
   if (e instanceof A.APIUserAbortError) return { text: 'Stopped.', aborted: true };
-  if (e instanceof A.AuthenticationError) return { text: 'The API rejected this key. Forget it and paste a valid one.', auth: true };
+  if (e instanceof A.AuthenticationError) return { text: proxy ? 'The API rejected this site\'s key. Try again later.' : 'The API rejected this key. Forget it and paste a valid one.', auth: true };
   if (e instanceof A.PermissionDeniedError) return { text: `This key cannot use ${MODEL}: ${e.message}`, auth: true };
-  if (e instanceof A.RateLimitError) return { text: 'Rate limited by the API. Wait a moment and send again.' };
+  if (e instanceof A.RateLimitError) {
+    const s = Number(e.headers?.get('retry-after')); // the proxy's hourly limit can mean a long wait
+    return { text: s > 90 ? `Rate limited. Try again in about ${Math.ceil(s / 60)} minutes.` : 'Rate limited by the API. Wait a moment and send again.' };
+  }
   if (e instanceof A.APIConnectionError) return { text: 'Could not reach api.anthropic.com. Check the connection and send again.' };
   if (e instanceof A.BadRequestError && /prompt is too long/i.test(e.message)) return { text: TOO_LONG };
   if (e instanceof A.APIError) {
