@@ -1,5 +1,7 @@
-# Builds web/ and publishes it to GitHub Pages on every push to main.
-# One-time setup by a repo admin: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+# Tests and builds web/ on every push to main. Publishing to GitHub Pages is opt-in so the run is not
+# red while Pages is off. To turn it on, a repo admin does both:
+#   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+#   Settings -> Secrets and variables -> Actions -> Variables -> new variable PAGES_ENABLED = true
 name: Deploy site
 on:
   push:
@@ -33,6 +35,7 @@ jobs:
           path: web/dist
   deploy:
     needs: build
+    if: vars.PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
