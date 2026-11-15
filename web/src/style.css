@@ -60,7 +60,7 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .shell { display: grid; height: 100dvh; grid-template-columns: var(--rail) minmax(0, 1fr) var(--insp); grid-template-rows: 44px minmax(0, 1fr) auto; }
 .shell > * { min-width: 0; min-height: 0; }
 .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--line); }
-.rail { grid-area: 2 / 1; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.rail { grid-area: 2 / 1; border-right: 1px solid var(--line); display: flex; flex-direction: column; position: relative; }
 .stage { grid-area: 2 / 2; position: relative; overflow: hidden; }
 .insp { grid-area: 2 / 3; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
 .sheet { grid-area: 2 / 2 / 3 / 4; z-index: 5; }
@@ -96,10 +96,26 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .insp .pane-head h2.mono { font-size: 13px; }
 .coord { font-size: 12px; color: var(--muted); }
 
-/* ---- scenario rail ---- */
-#cards { overflow-y: auto; min-height: 0; }
-.card { position: relative; padding: 10px 12px 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
-.card.sel { background: var(--surface); box-shadow: inset 2px 0 0 var(--fg); cursor: default; }
+/* ---- rail: scenario chips, editor pop-over ---- */
+.chips { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px 10px 14px; border-bottom: 1px solid var(--line); }
+.chip { height: auto; min-height: 58px; padding: 6px 8px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 7px; align-items: center; text-align: left; white-space: normal; background: var(--bg); }
+.chip .badge { grid-row: 1 / 3; align-self: start; margin-top: 1px; }
+.chip-name { font-weight: 600; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip-name.mono { font-size: 11px; font-weight: 500; }
+.chip-when { font: 11px/14px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip-kpi { grid-column: 1 / -1; display: flex; gap: 7px; word-spacing: -0.3em; font: 11.5px/16px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; transition: opacity .15s; }
+.chip-kpi b { font-weight: 500; }
+.chip-kpi .sun { color: var(--sun); } .chip-kpi .earth { color: var(--earth); }
+.chip.busy .chip-kpi { opacity: .35; }
+.chip.err .chip-kpi { color: var(--bad); }
+.chip-add { grid-template-columns: 1fr; place-items: center; border-style: dashed; color: var(--muted); }
+.chip-add:hover { color: var(--fg); }
+.editor-anchor { position: relative; height: 0; z-index: 6; }
+.editor { position: absolute; top: 4px; left: 0; right: 0; max-height: min(70vh, 620px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: 0 12px 32px rgb(0 0 0 / .6); }
+.editor-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 0 14px; }
+.editor-head .icon { border: 0; }
+.card { position: relative; padding: 4px 12px 12px 14px; }
+.card:not(.sel) { display: none; }
 .card-top { display: flex; align-items: center; gap: 4px; }
 .card-head { flex: 1; display: flex; align-items: center; gap: 10px; height: auto; padding: 2px 0; border: 0; text-align: left; min-width: 0; }
 .card-title { display: flex; flex-direction: column; min-width: 0; }
@@ -143,8 +159,39 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .steps { justify-self: start; }
 .steps button { font-family: var(--mono); font-size: 11.5px; padding: 0 6px; word-spacing: -0.3em; }
 .note { font-size: 12px; color: var(--muted); padding-bottom: 2px; text-wrap: pretty; }
-.add { flex: none; margin: 10px 12px 12px 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
-.add:hover:not(:disabled) { color: var(--fg); }
+
+/* ---- rail: agent panel ---- */
+.agent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.agent-auth { overflow-y: auto; padding: 14px 12px 14px 14px; }
+.keyform { display: grid; gap: 10px; }
+.keyform p { text-wrap: pretty; color: var(--muted); }
+.keyform p b { color: var(--fg); }
+.keyform input { width: 100%; font-family: var(--mono); font-size: 12px; }
+.keyform button { justify-self: start; border-color: var(--line-strong); }
+.keyerr { color: var(--bad) !important; }
+.keyerr:empty { display: none; }
+.thread { flex: 1; min-height: 120px; overflow-y: auto; padding: 12px 12px 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.msg { white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty; }
+.msg.user { align-self: flex-end; max-width: 88%; padding: 5px 9px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.msg.note, .msg.wait { font-size: 12px; color: var(--muted); }
+.msg.note.err { color: var(--bad); }
+.msg.wait::after { content: "…"; }
+.tool { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; line-height: 16px; color: var(--muted); padding-left: 8px; border-left: 1px solid var(--line-strong); min-width: 0; }
+.tool code { flex: none; font: 11px/16px var(--mono); color: var(--faint); }
+.tool span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool.run span { color: var(--faint); }
+.tool.err span { color: var(--bad); }
+.suggest { margin-top: auto; display: grid; gap: 6px; }
+.suggest button { height: auto; padding: 6px 9px; text-align: left; white-space: normal; color: var(--muted); }
+.suggest button:hover { color: var(--fg); }
+.ask { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; padding: 8px 12px 6px 14px; border-top: 1px solid var(--line); }
+.ask textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 8px; resize: none; min-width: 0; }
+.ask textarea:hover, .ask textarea:focus { border-color: var(--line-strong); }
+.ask .send { height: auto; border-color: var(--line-strong); }
+.ask .send.stop { color: var(--bad); }
+.agent-foot { flex: none; display: flex; gap: 12px; align-items: baseline; padding: 0 12px 8px 14px; font-size: 11.5px; }
+.agent-foot .lbl { margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.agent-foot .link { color: var(--muted); font-size: 11.5px; }
 
 /* ---- stage ---- */
 .pane { position: absolute; inset: 0; }
@@ -255,7 +302,9 @@ table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
   .legend { grid-column: auto; flex-direction: column; gap: 2px; }
   .lanes { border: 0; padding-right: 12px; }
   .dock-r { padding: 8px 12px 12px; }
-  #cards, .insp-body { overflow: visible; }
+  .insp-body { overflow: visible; }
+  .thread { max-height: 60vh; }
+  .ask textarea { font-size: 16px; } /* below 16px iOS zooms the page on focus */
   .card .rm, .pad button { width: 32px; height: 32px; }
   .pad { grid-template: repeat(3, 32px) / repeat(3, 32px); }
   .seg button { height: 32px; min-width: 32px; }
