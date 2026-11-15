@@ -4,7 +4,7 @@ import { Dem } from './dem';
 import { Ephem } from './ephem';
 import { azel } from './geom';
 import { horizon } from './horizon';
-import { metrics, series } from './series';
+import { eclipse, metrics, series } from './series';
 import { monteCarlo } from './mc';
 import { landingT } from '../ui/format';
 
@@ -111,5 +111,14 @@ describe('catalogue landing times', () => {
     const eph = new Ephem(await json('ephem_apollo.json'), await buf('ephem_apollo.bin'));
     const v = eph.at(landingT(a11.date));
     expect(Math.abs(azel(a11.lat, a11.lon, 0, v[0], v[1], v[2]).el - 10.7)).toBeLessThan(0.1);
+  });
+});
+
+describe('eclipse', () => {
+  it('Earth disk over the Sun: none, full, half, and an annulus when Earth is smaller', () => {
+    expect(eclipse(10, 5, 0.27, 10, 8, 0.95)).toBe(0);            // 3 deg apart
+    expect(eclipse(10, 5, 0.27, 10, 5.1, 0.95)).toBe(1);          // Sun inside Earth's disk
+    expect(eclipse(0, 0, 0.27, 0, 0.27, 0.27)).toBeCloseTo(0.391, 3); // equal disks, one radius apart
+    expect(eclipse(0, 0, 0.27, 0, 0, 0.135)).toBeCloseTo(0.25, 6);    // small disk fully inside: area ratio
   });
 });

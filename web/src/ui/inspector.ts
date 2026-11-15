@@ -4,6 +4,7 @@
 // State lives at module level and changes only through the registered actions (`chart.set`,
 // `inspector.details`), so the buttons and the AI agent share one path and the module can be imported and
 // tested without a DOM. `mountInspector` builds the markup and subscribes to the state.
+import { externalLinks } from './links';
 import type { ScenarioResult } from '../core/api';
 import { DSN_NAMES } from '../core/extra';
 import { actions, register, type Action } from './actions';
@@ -243,7 +244,8 @@ const MARKUP = `
         </div>
       </div>
       <div class="sec-head"><h3 class="lbl" id="c-title"></h3><div id="c-legend" class="c-legend" aria-label="Scenario colours"></div></div>
-      <p id="c-read" class="c-read"></p>
+      <div class="c-readrow"><p id="c-read" class="c-read"></p>
+        <button type="button" id="c-zoom-btn" class="mini" aria-haspopup="dialog" title="Enlarge the chart">${ICON.sky}<span>Zoom</span></button></div>
       <canvas id="c-chart" class="chart" role="img" aria-label="Chart"></canvas>
     </section>
 
@@ -262,6 +264,7 @@ const MARKUP = `
       <button type="button" id="i-details" class="disclose" aria-expanded="false" aria-controls="i-more">${ICON.chev}<span>Details</span><span class="quiet">figures at landing and the 12-month strip</span></button>
       <div id="i-more" class="more" hidden>
         <table id="i-table" class="m"></table>
+        <p class="ext">Explore this spot in <a id="i-qm" target="_blank" rel="noopener">LROC QuickMap</a> or <a id="i-trek" target="_blank" rel="noopener">NASA Moon Trek</a></p>
         <section>
           <div class="sec-head"><h3 class="lbl" id="i-year">12 months</h3><span class="lbl quiet">Click to set the landing date</span></div>
           <canvas id="i-strip" class="strip" role="img" aria-label="Sunlight and Earth visibility over one year"></canvas>
@@ -270,6 +273,7 @@ const MARKUP = `
       </div>
     </section>
 
+    <dialog id="c-zoom" class="sky zoom" aria-label="Chart, enlarged"></dialog>
   </div>`;
 
 export interface InspectorHandle {
@@ -321,6 +325,9 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     b.style.setProperty('--sc', SCENARIO_COLORS[d.selected()]);
     $('#i-name').textContent = d.name(sc);
     $('#i-coord').textContent = coord(sc.spec.lat, sc.spec.lon, 4);
+    const ext = externalLinks(sc.spec.lat, sc.spec.lon);
+    $<HTMLAnchorElement>('#i-qm').href = ext.quickmap;
+    $<HTMLAnchorElement>('#i-trek').href = ext.trek;
   }
 
   function paintStrip() {
@@ -463,7 +470,24 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     else if (du) void act('chart.set', { durationDays: +du.dataset.dur! });
     else if (t.closest('#i-details')) void act('inspector.details', { open: !state.details });
     else if (t.closest('#i-sky')) void act('sky.open', {}).catch(() => {});
+    else if (t.closest('#c-zoom-btn')) zoomed(!zoom.open);
+    else if (t === zoom && downOnScrim) zoomed(false); // the dialog element itself = the scrim
   });
+
+  /* ---- zoom: the chart section itself (controls, legend, readout, canvas) moves into a modal dialog and back ---- */
+
+  const zoom = $<HTMLDialogElement>('#c-zoom'), sec = $('.chart-sec'), home = document.createComment('chart');
+  let downOnScrim = false; // a drag that starts inside and ends on the scrim must not close it
+  zoom.addEventListener('pointerdown', (e) => { downOnScrim = e.target === zoom; });
+  zoom.addEventListener('keydown', (e) => e.stopPropagation()); // the page's shortcuts stay off while it is open
+  zoom.addEventListener('close', () => zoomed(false)); // Esc
+  function zoomed(on: boolean) {
+    if (on === (sec.parentElement === zoom)) return;
+    if (on) { sec.before(home); zoom.append(sec); zoom.showModal(); }
+    else { home.replaceWith(sec); zoom.close(); }
+    $('#c-zoom-btn span').textContent = on ? 'Close' : 'Zoom';
+    chart.render(); // the ResizeObserver also fires; this avoids one stale frame
+  }
 
   /* ---- pointer: hover readout, click or drag to scrub ---- */
 

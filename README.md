@@ -4,7 +4,7 @@
 
 Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 
-- Runs entirely in the browser. No backend, no account.
+- Runs entirely in the browser. No account, and no backend except one optional function that relays the assistant's calls on Vercel.
 - Any coordinate on the Moon. 20 m terrain at the south pole's candidate regions, coarser terrain elsewhere.
 - The Sun and Earth geometry, the terrain horizons and the shadow predictions are checked against NASA sources, and the checks are in this repo.
 
@@ -12,13 +12,14 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 
 - **3D terrain stage.** Five south-pole regions rendered in real 3D from 20 m LOLA terrain, with shadows traced toward the Sun through the terrain out to 300 km. Press play and the shadows sweep across a lunar day. Two render modes: Realistic (black shadows) and Clear (shadows lifted so relief stays readable). "Stand at site" puts the camera on the mast with the Sun and Earth on the real horizon. Click the terrain to place a site.
 - **Scenarios.** Up to four site-and-date combinations, A to D: any catalogue site (Artemis candidate regions, flown and planned CLPS landers, Chandrayaan-3, SLIM, Chang'e 3 to 6, Apollo 11 to 17) or any coordinate, picked from a list, typed, clicked on the map or the 3D terrain, or nudged 50 to 500 m at a time.
-- **Assistant.** A chat panel where Claude operates the app through the same controls a person uses: it can add and move scenarios, change dates, set a schedule slip, open the comparison and read the results back. It needs the user's own Anthropic API key, kept only in the browser. Everything else works without it.
+- **Assistant.** A chat panel where Claude operates the app through the same controls a person uses: it can add and move scenarios, change dates, set a schedule slip, open the comparison and read the results back. On Vercel it uses the site owner's key through a small function; elsewhere it needs the user's own Anthropic API key, kept only in the browser. Everything else works without it.
 - **Timeline.** One lane per scenario on a shared 29.5-day axis: sunlight above, Earth visibility below. A schedule slip of up to 60 days recomputes every scenario for the later date and draws it as a ghost lane.
 - **Inspector.** Horizon panorama (terrain silhouette with Sun and Earth tracks); a chart of solar power or Sun elevation above the terrain for every scenario; a windows bar showing when each site is sunlit, has Earth in view, and has Deep Space Network contact; a Power and a Comms verdict with the thresholds stated; and the raw figures (time to sunset and Earthset, sunlit share, longest darkness, battery survival) behind a Details button.
 - **Sky view.** An all-sky chart from the site: the terrain as a band around the edge, the Sun's and Earth's paths over the mission, dashed where terrain hides them, with a "horizon zoom" scale because at the pole everything happens within a few degrees of the horizon.
 - **Compare.** One table, scenarios side by side, best value marked in each row, with the change under each value when a slip is set.
 - **Map.** South-pole and whole-Moon maps with shading layers for NASA's average sunlight and Earth visibility, permanently shadowed regions, elevation and slope.
 - **Science context.** Each scenario reports the distance to the nearest permanently shadowed region, the cold traps where water ice can survive and the reason missions go to the south pole.
+- **Hand-off to the expert tools.** Each scenario links to the same spot in LROC QuickMap and NASA Moon Trek.
 - **Report.** "Generate report" writes up the current scenarios as a research paper: data, methods, results, a comparison of real LRO photos against our predicted shadows, every validation number below, and the known limits. It prints or saves as PDF.
 - Scenarios, slip, view and chart settings are stored in the URL, so a link reproduces the screen.
 
@@ -36,6 +37,16 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 | Mission planners, educators and the public | Numbers with uncertainty and validation for planners; plain-language explainer, status sentences and the assistant for everyone else |
 | Real topography, no atmosphere, libration | LOLA terrain horizon with exact curvature and no refraction; Earth's libration comes from the JPL lunar orientation model |
 | Why small location or date changes matter | 100 m nudge buttons and the slip slider show it directly |
+
+### Resources named in the challenge
+
+| Resource | How this project uses it |
+|---|---|
+| Lunar Orbiter Laser Altimeter (LOLA) | The terrain behind every number. The horizon at any point is traced through LOLA elevation models: 20 m and 80 m grids at the south pole, the global LDEM elsewhere. |
+| JPL Horizons | Independent check of our Sun and Earth directions (5 sites x 20 dates, max error 0.00012 deg). Positions themselves come from the same DE440 ephemeris through SPICE. |
+| LROC QuickMap | Linked, not a data source. Details has an "Explore this spot in LROC QuickMap" link that opens the selected site there; the LRO photos in our shadow comparison come from the same LROC archive. |
+| NASA Moon Trek | Linked, not a data source. The same Details line opens the selected site in Moon Trek for further exploration once the comparison here has narrowed the choice. |
+| CSA Moon exploration | Background on partner missions. CSA's first lunar rover was aimed at the south pole (its page now lists the project as ended) and no landing coordinates were published, so it is not in the site catalogue. The lander it was booked on, Firefly Blue Ghost Mission 4, targets the Haworth rim area, which the catalogue's Haworth site covers. |
 
 ## How it works
 
@@ -93,7 +104,7 @@ Read these with their limits:
 - The uncertainty bands cover elevation-model error near the site only, were calibrated at one site, and came out about 1.5x narrower than NASA's own terrain realisations imply on held-out data. Treat them as a lower bound. The offset between our 20 m result and the 5 m terrain (0.1-0.4% of yearly illumination here) is larger than the band itself.
 - Permanent-shadow data covers only the area poleward of about 85°S, counts regions of at least 0.1 km², and comes from NASA's 60 m long-term simulation, not from our own horizon engine. Distances are good to about 0.1 km.
 - The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
-- Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
+- Power is the visible fraction of the solar disk (terrain and Earth eclipses taken out) for a Sun-tracking panel. No thermal model, no link budget.
 - The battery model and the Deep Space Network table are simple and have unit tests only; they are not validated against an external source. The DSN table uses a 10 deg elevation mask and a simplified Earth rotation model.
 
 ## Run it
@@ -109,6 +120,16 @@ npm run build    # static site in web/dist
 ```
 
 The site is static: `web/dist` can be hosted anywhere. `.github/workflows/pages.yml` builds, tests and deploys it to GitHub Pages on every push to `main` once a repo admin sets Settings > Pages > Source to "GitHub Actions".
+
+### Deploy on Vercel
+
+On Vercel, visitors can use the assistant without a key: `web/api/v1/messages.ts` is a Vercel Function that forwards the app's Claude calls with the owner's key. The app checks for it on first use (`GET /api/v1/messages`). Where it is missing (GitHub Pages, `npm run dev`) the app falls back to the paste-a-key form. A visitor who already saved a key of their own keeps using it.
+
+1. Import the repo in Vercel with Root Directory `web`. Vercel detects the Vite preset (`npm run build`, output `dist`).
+2. Settings > Environment Variables: add `ANTHROPIC_API_KEY` for Production (and Preview if you want it there), then redeploy. Do not add a `VITE_` prefix: Vite copies `VITE_*` variables into the public JavaScript.
+3. In the Anthropic Console, create the key in a workspace of its own and set a monthly spend limit on that workspace. The limits below make abuse slower; that spend limit is the real hard cap.
+
+The function forwards only `POST /v1/messages` with `claude-opus-5-5`, `max_tokens` up to 16000, the fields and tools the app sends (no server tools, no fast mode) and bodies up to 1 MB. It allows 60 calls per IP address per hour (an agent turn is one call per round of tool calls). The count is kept in memory, so the limit applies per function instance: traffic spread over several instances, or a redeploy, starts new counts. For one global limit, add a Vercel Firewall rate-limit rule on `/api/v1/messages`, or keep the counter in Upstash Redis from the Vercel Marketplace. `web/vercel.json` sets the function's maximum duration to 300 s (the Hobby maximum; Pro allows up to 800) and stops the upstream call when the visitor presses Stop.
 
 Everything the app needs is already in `web/public/data/`. To rebuild the data from the original NASA files (needs [uv](https://docs.astral.sh/uv/), about 350 MB of downloads):
 

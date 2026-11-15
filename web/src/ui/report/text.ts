@@ -101,6 +101,7 @@ export const dataSection: SectionFn = async (ctx) => {
     p('Two tables list every dataset this report relies on. The first holds the data that enter the computed numbers. The second holds data used only to check the method; their outcomes are in the Validation section. Of those, the 5 m realisations also set the two constants of the uncertainty model (Methods).'),
     table('Data used to compute the results.', HEAD, rows.filter((x) => x[4] === RES).map((x) => x.slice(0, 4)), 'r-datatab'),
     table('Data used only to check the method.', HEAD, rows.filter((x) => x[4] === CHK).map((x) => x.slice(0, 4)), 'r-datatab'),
+    p('Not used as data: the LRO photos were found with the PDS Geosciences Orbital Data Explorer (<a class="r-link" href="https://ode.rsl.wustl.edu/moon/" target="_blank" rel="noopener">ode.rsl.wustl.edu</a>); the app links each scenario to the same spot in LROC QuickMap and NASA Moon Trek (<a class="r-link" href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">trek.nasa.gov</a>) for further exploration; and the Canadian Space Agency\'s Moon exploration pages (<a class="r-link" href="https://www.asc-csa.gc.ca/eng/astronomy/moon-exploration/" target="_blank" rel="noopener">asc-csa.gc.ca</a>) gave background on partner missions.'),
     p(`Heights come from the finest tile that contains each point. A site inside a 20 m window therefore still sees distant ridges through the ${sp?.px ?? 240} m and global terrain. The terrain at each scenario's site is:`),
     `<ul>${at}</ul>`,
     '<h3>Data and code availability</h3>',

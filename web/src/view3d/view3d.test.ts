@@ -6,7 +6,7 @@ import { azel, horizonAt, spInv } from '../core/geom';
 import { horizon } from '../core/horizon';
 import { frac } from '../core/series';
 import { SUN_RADIUS_DEG, sunFractionAt } from './march';
-import { regionAt, regionTiles } from './regions';
+import { inSurround, regionAt, regionTiles } from './regions';
 
 const DATA = new URL('../../public/data/', import.meta.url);
 const buf = async (p: string) => { const b = await readFile(new URL(p, DATA)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
@@ -105,6 +105,9 @@ describe('3D regions', () => {
     expect(at('degerlache_rim')).toBe('degerlache_20m');
     expect(regionAt(m.tiles, 0.6741, 23.473)).toBeUndefined();   // Apollo 11
     expect(regionAt(m.tiles, -80, 90)).toBeUndefined();          // polar, but in no 20 m tile
+    expect(inSurround(m.tiles, -87.6058, -90.8012)).toBe(true);   // no 20 m tile, but on the 240 m surround: pinnable
+    expect(inSurround(m.tiles, -75, 45)).toBe(false);             // beyond the 240 m tile's corner
+    expect(inSurround(m.tiles, 0.6741, 23.473)).toBe(false);      // Apollo 11
     const t = m.tiles.find((x: { id: string }) => x.id === 'malapert_20m');
     const [lat, lon] = spInv(t.x0 + 500, t.y0 - 5000);            // 500 m inside the edge: within the 1 km margin
     expect(regionAt(m.tiles, lat, lon)).toBeUndefined();
