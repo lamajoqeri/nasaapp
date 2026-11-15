@@ -4,6 +4,7 @@
 // State lives at module level and changes only through the registered actions (`chart.set`,
 // `inspector.details`), so the buttons and the AI agent share one path and the module can be imported and
 // tested without a DOM. `mountInspector` builds the markup and subscribes to the state.
+import { externalLinks } from './links';
 import type { ScenarioResult } from '../core/api';
 import { DSN_NAMES } from '../core/extra';
 import { actions, register, type Action } from './actions';
@@ -263,6 +264,7 @@ const MARKUP = `
       <button type="button" id="i-details" class="disclose" aria-expanded="false" aria-controls="i-more">${ICON.chev}<span>Details</span><span class="quiet">figures at landing and the 12-month strip</span></button>
       <div id="i-more" class="more" hidden>
         <table id="i-table" class="m"></table>
+        <p class="ext">Explore this spot in <a id="i-qm" target="_blank" rel="noopener">LROC QuickMap</a> or <a id="i-trek" target="_blank" rel="noopener">NASA Moon Trek</a></p>
         <section>
           <div class="sec-head"><h3 class="lbl" id="i-year">12 months</h3><span class="lbl quiet">Click to set the landing date</span></div>
           <canvas id="i-strip" class="strip" role="img" aria-label="Sunlight and Earth visibility over one year"></canvas>
@@ -323,6 +325,9 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     b.style.setProperty('--sc', SCENARIO_COLORS[d.selected()]);
     $('#i-name').textContent = d.name(sc);
     $('#i-coord').textContent = coord(sc.spec.lat, sc.spec.lon, 4);
+    const ext = externalLinks(sc.spec.lat, sc.spec.lon);
+    $<HTMLAnchorElement>('#i-qm').href = ext.quickmap;
+    $<HTMLAnchorElement>('#i-trek').href = ext.trek;
   }
 
   function paintStrip() {

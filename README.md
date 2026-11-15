@@ -19,6 +19,7 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 - **Compare.** One table, scenarios side by side, best value marked in each row, with the change under each value when a slip is set.
 - **Map.** South-pole and whole-Moon maps with shading layers for NASA's average sunlight and Earth visibility, permanently shadowed regions, elevation and slope.
 - **Science context.** Each scenario reports the distance to the nearest permanently shadowed region, the cold traps where water ice can survive and the reason missions go to the south pole.
+- **Hand-off to the expert tools.** Each scenario links to the same spot in LROC QuickMap and NASA Moon Trek.
 - **Evidence.** A plain-language explanation of why the south pole is hard, a draggable comparison of a real LRO photo against our prediction for the same moment, and every validation number below.
 - Scenarios, slip, view and chart settings are stored in the URL, so a link reproduces the screen.
 
@@ -36,6 +37,16 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 | Mission planners, educators and the public | Numbers with uncertainty and validation for planners; plain-language explainer, status sentences and the assistant for everyone else |
 | Real topography, no atmosphere, libration | LOLA terrain horizon with exact curvature and no refraction; Earth's libration comes from the JPL lunar orientation model |
 | Why small location or date changes matter | 100 m nudge buttons and the slip slider show it directly |
+
+### Resources named in the challenge
+
+| Resource | How this project uses it |
+|---|---|
+| Lunar Orbiter Laser Altimeter (LOLA) | The terrain behind every number. The horizon at any point is traced through LOLA elevation models: 20 m and 80 m grids at the south pole, the global LDEM elsewhere. |
+| JPL Horizons | Independent check of our Sun and Earth directions (5 sites x 20 dates, max error 0.00012 deg). Positions themselves come from the same DE440 ephemeris through SPICE. |
+| LROC QuickMap | Linked, not a data source. Details has an "Explore this spot in LROC QuickMap" link that opens the selected site there; the LRO photos in our shadow comparison come from the same LROC archive. |
+| NASA Moon Trek | Linked, not a data source. The same Details line opens the selected site in Moon Trek for further exploration once the comparison here has narrowed the choice. |
+| CSA Moon exploration | Background on partner missions. CSA's first lunar rover was aimed at the south pole (its page now lists the project as ended) and no landing coordinates were published, so it is not in the site catalogue. The lander it was booked on, Firefly Blue Ghost Mission 4, targets the Haworth rim area, which the catalogue's Haworth site covers. |
 
 ## How it works
 

@@ -176,6 +176,8 @@ const CREDITS: { data: string; use: string; source: string; url: string }[] = [
   { data: 'LROC NAC DTM orthoimages (SHACKRDGE02, ESALL_CR1, ESALL_SR12)', use: 'Shadow comparison', source: 'NASA/GSFC/Arizona State University, LROC PDS archive', url: 'https://data.lroc.im-ldi.com/' },
   { data: 'DE440 ephemeris, lunar orientation and frame kernels', use: 'Sun and Earth positions', source: 'NASA JPL NAIF', url: 'https://naif.jpl.nasa.gov/naif/data.html' },
   { data: 'JPL Horizons', use: 'Validation of Sun and Earth directions', source: 'NASA JPL SSD', url: 'https://ssd.jpl.nasa.gov/horizons/' },
+  { data: 'LROC QuickMap and NASA Moon Trek', use: 'Linked from each scenario for further exploration; not used as data', source: 'quickmap.lroc.im-ldi.com, trek.nasa.gov', url: 'https://trek.nasa.gov/moon/' },
+  { data: 'Canadian Space Agency, Moon exploration', use: 'Background on partner missions', source: 'asc-csa.gc.ca', url: 'https://www.asc-csa.gc.ca/eng/astronomy/moon-exploration/' },
   { data: 'PDS Geosciences Orbital Data Explorer', use: 'Finding the orthoimages', source: 'ode.rsl.wustl.edu', url: 'https://ode.rsl.wustl.edu/moon/' },
 ];
 
