@@ -188,3 +188,9 @@ New, all optional to use:
 - `validation.json` gained `pgda_other_regions` (4 more regions) and `pgda_240m_only_region`. `bench/index.json` gained `time_matching_check`. `CONTRACT.md` now has a single `bench/index.json` schema.
 - `README.md` on main is written (method, validation table, limits, data credits, AI disclosure). Add the live URL and screenshots when deployed; fix the "Run it" section if your commands differ.
 - `calibration.json` is now in the repo (held-out clones 31-60): horizon spread 0.052 deg NASA vs 0.046 deg ours; yearly % lit spread 0.24% NASA vs 0.16% ours. Label the bands "terrain-model uncertainty, lower bound". No constant changed since the 45 deg update.
+
+## Update Sat 16:10 PST — main now carries the cockpit UI
+
+- `main` was rebuilt around a full-screen 3D cockpit (web/src/ui/app.ts, scenario.ts, timeline.ts, compare.ts, map.ts, evidence.ts, web/src/view3d/). The earlier column UI, `web-map`, `web-proof`, `web-comms` and the first `web-3d` implementation were merged for history but their files are superseded by the cockpit versions. Do not build on the old files; pull `main` first.
+- Commit history on `main` was rewritten once (16:05) to drop co-author trailers. If you have a local clone from before that: `git fetch origin && git checkout main && git reset --hard origin/main` (after saving any unpushed work on a branch and rebasing it onto the new main).
+- GitHub Pages: the deploy workflow builds and tests fine but cannot publish until a repo admin enables Pages (Settings > Pages > Source: GitHub Actions).

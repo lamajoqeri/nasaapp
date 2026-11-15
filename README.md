@@ -8,6 +8,17 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 - Any coordinate on the Moon. 20 m terrain at the south pole's candidate regions, coarser terrain elsewhere.
 - The Sun and Earth geometry, the terrain horizons and the shadow predictions are checked against NASA sources, and the checks are in this repo.
 
+## What is in the app
+
+- **3D terrain stage.** The south pole's candidate regions rendered in real 3D from 20 m LOLA terrain, with shadows traced toward the Sun through the terrain out to 300 km. Press play and the shadows sweep across a lunar day. "Stand at site" puts the camera on the mast with the Sun and Earth on the real horizon. The shader is checked against the horizon engine (agreement within 0.4% of the solar disk at the test site).
+- **Scenarios.** Up to four site-and-date combinations, A to D: any catalogue site (Artemis candidate regions, CLPS and other recent landers, Apollo) or any coordinate, picked from a list, typed, clicked on the map, or nudged 50 to 500 m at a time.
+- **Timeline.** One lane per scenario on a shared 29.5-day axis: sunlight above, Earth visibility below. Set a schedule slip of up to 60 days and each scenario is recomputed for the later date and drawn as a ghost lane, with every metric showing its change.
+- **Inspector.** Horizon panorama (terrain silhouette, Sun and Earth tracks), plain-language status, and metrics: time to sunset and Earthset, sunlit share, longest darkness, Earth in view, Deep Space Network contact, battery survival.
+- **Compare.** One table, scenarios side by side, best value marked in each row.
+- **Map.** South pole and whole-Moon maps with NASA's average sunlight and Earth-visibility overlays, for choosing where to look.
+- **Evidence.** Drag between a real LRO photo and our prediction for the same moment, plus every validation number below.
+- Scenarios, slip and view are stored in the URL, so a link reproduces the screen.
+
 ## How it works
 
 ```
@@ -68,7 +79,7 @@ Read these with their limits:
 
 ## Run it
 
-Web app (needs Node 20+; lives on the `web-core` branch until it is merged to `main`):
+Web app (needs Node 20+):
 
 ```
 cd web
@@ -77,6 +88,8 @@ npm run dev      # local dev server
 npm test         # core tests against the fixtures
 npm run build    # static site in web/dist
 ```
+
+The site is static: `web/dist` can be hosted anywhere. `.github/workflows/pages.yml` builds, tests and deploys it to GitHub Pages on every push to `main` once a repo admin sets Settings > Pages > Source to "GitHub Actions".
 
 Everything the app needs is already in `web/public/data/`. To rebuild the data from the original NASA files (needs [uv](https://docs.astral.sh/uv/), about 350 MB of downloads):
 
