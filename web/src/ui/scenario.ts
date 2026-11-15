@@ -39,7 +39,7 @@ export class Scenario {
       this.cmp = rows(b.metrics, null, b.mission);
       this.busy = false;
       this.env.onUpdate(this);
-      if (this.env.slip()) void this.computeSlip();
+      if (this.env.slip()) await this.computeSlip(); // awaited so callers of compute() get the delayed numbers too
     } catch (e) {
       if (tok !== this.token) return;
       this.busy = false; this.error = `Could not compute: ${(e as Error).message}.`;
