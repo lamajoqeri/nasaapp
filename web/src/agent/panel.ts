@@ -28,7 +28,7 @@ export function mountAgent(root: HTMLElement, opts: { sites: PromptSite[] }): vo
     root.innerHTML = `
       <div class="thread" role="log" aria-live="polite" aria-label="Conversation with the assistant"></div>
       <form class="ask">
-        <textarea rows="2" aria-label="Message the assistant" placeholder="Ask about sites, dates or delays"></textarea>
+        <textarea rows="4" aria-label="Message the assistant" placeholder="Ask about sites, dates or delays"></textarea>
         <button type="submit" class="send">Send</button>
       </form>
       <div class="agent-foot">
