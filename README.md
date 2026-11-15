@@ -37,6 +37,16 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 | Real topography, no atmosphere, libration | LOLA terrain horizon with exact curvature and no refraction; Earth's libration comes from the JPL lunar orientation model |
 | Why small location or date changes matter | 100 m nudge buttons and the slip slider show it directly |
 
+### Resources named in the challenge
+
+| Resource | How this project uses it |
+|---|---|
+| Lunar Orbiter Laser Altimeter (LOLA) | The terrain behind every number. The horizon at any point is traced through LOLA elevation models: 20 m and 80 m grids at the south pole, the global LDEM elsewhere. |
+| JPL Horizons | Independent check of our Sun and Earth directions (5 sites x 20 dates, max error 0.00012 deg). Positions themselves come from the same DE440 ephemeris through SPICE. |
+| LROC QuickMap | Not a data source. The expert map tool this app is a faster front door to; the LRO photos in our shadow comparison come from the same LROC archive. |
+| NASA Moon Trek | Not a data source. The 3D portal for exploring a site further once the comparison here has narrowed the choice. |
+| CSA Moon exploration | Background on partner missions. |
+
 ## How it works
 
 ```
