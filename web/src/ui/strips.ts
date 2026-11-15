@@ -7,7 +7,7 @@ export interface StripOptions {
   markT2?: number;
 }
 
-const BG = '#0b0e14', TEXT = '#cfd6e4', LABEL_W = 38, AXIS_H = 13, GAP = 2;
+const BG = '#0a0b0d', TEXT = '#8e939c', LABEL_W = 38, AXIS_H = 13, GAP = 2;
 const MONTHS = 'JFMAMJJASOND';
 
 const span = (s: StripResult) => s.sunFrac.length * s.stepMs;
@@ -16,7 +16,7 @@ const span = (s: StripResult) => s.sunFrac.length * s.stepMs;
 function ramp(a: number[], b: number[], t: number): string {
   return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`;
 }
-const DARK = [22, 26, 36], AMBER = [255, 176, 46], BLUE = [70, 150, 255];
+const DARK = [24, 27, 32], AMBER = [242, 181, 68], BLUE = [91, 156, 245];
 
 /** Draws a year heat-strip (lit fraction + Earth-visible rows) into the canvas. */
 export function drawStrip(canvas: HTMLCanvasElement, strip: StripResult, opts: StripOptions = {}): void {
@@ -71,8 +71,8 @@ export function drawStrip(canvas: HTMLCanvasElement, strip: StripResult, opts: S
     ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash);
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore();
   };
-  mark(opts.markT2, '#ff9b3d', [3, 2]);
-  mark(opts.markT, '#ffffff', []);
+  mark(opts.markT2, '#ef6b6b', [3, 2]);
+  mark(opts.markT, '#e8e6e1', []);
 }
 
 /** Converts a pointer clientX over the canvas into a time (ms), clamped to the strip range. */

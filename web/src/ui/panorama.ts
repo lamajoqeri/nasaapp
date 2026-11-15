@@ -7,8 +7,8 @@ export interface PanoramaOptions {
   label?: string;
 }
 
-const BG = '#0b0e14', TEXT = '#cfd6e4', GRID = 'rgba(207,214,228,0.12)';
-const SUN = '#ffb347', EARTH = '#5fa8ff', TERRAIN = '#2a2f3a', EDGE = '#8a93a6';
+const BG = '#0a0b0d', TEXT = '#8e939c', GRID = 'rgba(232,230,225,0.08)';
+const SUN = '#f2b544', EARTH = '#5b9cf5', TERRAIN = '#1c2026', EDGE = '#6b717b';
 const EARTH_R = 0.95; // deg
 
 // y-range only depends on the result, so compute once per result (redraws happen every frame).
@@ -135,11 +135,11 @@ export function drawPanorama(canvas: HTMLCanvasElement, result: ScenarioResult, 
   if (opts.label) ctx.fillText(opts.label, L, ty);
   ctx.textAlign = 'right';
   const ex = ky / kx;
-  ctx.fillText(`elev. ×${ex >= 10 ? ex.toFixed(0) : ex.toFixed(1)} vs az`, W - R, ty);
+  ctx.fillText(`vertical scale ×${ex >= 10 ? ex.toFixed(0) : ex.toFixed(1)}`, W - R, ty);
   ctx.textAlign = 'left';
   let lx = L + 6;
   const ly = T + font;
-  ctx.fillStyle = 'rgba(11,14,20,0.7)';
+  ctx.fillStyle = 'rgba(10,11,13,0.7)';
   ctx.fillRect(L + 2, ly - font, 3 * 23 + ctx.measureText('SunEarthTerrain').width + 8, font * 2);
   for (const [name, c] of [['Sun', SUN], ['Earth', EARTH], ['Terrain', EDGE]]) {
     ctx.fillStyle = c; ctx.fillRect(lx, ly - 1.5, 10, 3);

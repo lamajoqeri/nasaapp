@@ -1,0 +1,42 @@
+/* Site-picker map. All classes prefixed lmap-; colours come from the tokens in style.css. */
+.lmap { font-size: 12px; font-variant-numeric: tabular-nums; }
+.lmap [hidden] { display: none; }
+
+.lmap-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.lmap-seg { display: flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.lmap-seg button { height: 24px; font-size: 12px; color: var(--muted); background: none; border: 0; border-radius: 2px; padding: 0 9px; }
+.lmap-seg button:hover { color: var(--fg); }
+.lmap-seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.lmap-seg button:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; position: relative; z-index: 1; }
+.lmap-canvas:focus-visible { outline: 1px solid var(--fg); outline-offset: -2px; }
+.lmap-zoom { margin-left: auto; }
+.lmap-zoom button { width: 26px; padding: 0; font-size: 14px; }
+
+.lmap-legend { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; color: var(--muted); white-space: nowrap; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.lmap-legend canvas { width: 96px; height: 6px; border: 1px solid var(--line); border-radius: 0; background: none; }
+
+.lmap-stage { position: relative; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.lmap-canvas { display: block; width: 100%; height: clamp(320px, 48vh, 560px); background: var(--bg); border: 0; border-radius: 0; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
+.lmap-canvas.lmap-dragging { cursor: grabbing; }
+.lmap-loading { position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; pointer-events: none; }
+
+.lmap-readout { margin: 6px 0 0; min-height: 1.45em; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.lmap-err { margin: 2px 0 0; color: var(--bad); }
+.lmap-err:empty { display: none; }
+
+/* Inside the app stage the map fills its pane and its chrome floats over the canvas. */
+.pane > .lmap { position: absolute; inset: 0; }
+.pane .lmap-bar { position: absolute; top: 12px; left: 108px; right: 12px; z-index: 2; margin: 0; gap: 8px; pointer-events: none; }
+.pane .lmap-bar > * { pointer-events: auto; }
+.pane .lmap-stage { position: absolute; inset: 0; border: 0; border-radius: 0; }
+.pane .lmap-canvas { height: 100%; }
+.pane .lmap-readout { position: absolute; left: 12px; bottom: 36px; max-width: calc(100% - 24px); margin: 0; min-height: 0; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane .lmap-err { position: absolute; left: 12px; bottom: 68px; margin: 0; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+@media (max-width: 1099px) {
+  .lmap-seg button { height: 32px; }
+  .lmap-zoom button { width: 32px; }
+}
+@media (max-width: 640px) {
+  .pane .lmap-bar { top: 56px; left: 12px; }
+  .pane .lmap-readout { white-space: normal; }
+}

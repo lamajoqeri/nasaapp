@@ -2,9 +2,10 @@
 import { Dem } from './dem';
 import { Ephem } from './ephem';
 import { horizon, type Horizon } from './horizon';
+import { battery, commsHours, type Dsn } from './extra';
 import { monteCarlo } from './mc';
 import { metrics, series, type Site } from './series';
-import type { Request, ScenarioResult, StripResult } from './api';
+import type { Mission, Request, ScenarioResult, StripResult } from './api';
 
 let dataBase = ''; // set by the first message from api.ts
 const get = async (p: string) => {
@@ -13,15 +14,29 @@ const get = async (p: string) => {
   return r.arrayBuffer();
 };
 
-let ready: Promise<{ dem: Dem; eph: Ephem }> | null = null;
+const text = (b: ArrayBuffer) => JSON.parse(new TextDecoder().decode(b));
+const table = async (name: string) => new Ephem(text(await get(name + '.json')), await get(name + '.bin'));
+
+/** ephs[0] is the main 2024-2040 table; an optional 1969-1972 table follows so Apollo sites can use their real dates. */
+let ready: Promise<{ dem: Dem; ephs: Ephem[]; dsn: Dsn | null }> | null = null;
 const init = () => (ready ??= (async () => {
-  const [dem, meta, bin] = await Promise.all([
+  const [dem, eph, apollo, dsnBits] = await Promise.all([
     Dem.open((f) => get('dem/' + f)),
-    get('ephem.json').then((b) => JSON.parse(new TextDecoder().decode(b))),
-    get('ephem.bin'),
+    table('ephem'),
+    table('ephem_apollo').catch(() => null), // optional
+    get('dsn.bin').catch(() => null),        // optional
   ]);
-  return { dem, eph: new Ephem(meta, bin) };
+  const dsn = dsnBits ? { t0: eph.t0, stepMs: eph.stepMs, bits: new Uint8Array(dsnBits) } : null;
+  return { dem, ephs: apollo ? [eph, apollo] : [eph], dsn };
 })().catch((e) => { ready = null; throw e; }));
+
+const OUTSIDE = 'that date is outside the ephemeris (2024–2040, plus 1969–1972 for the Apollo landings)';
+/** The table that fully contains [t0, t1], or the one containing t0 when t1 is omitted. */
+function pick(ephs: Ephem[], t0: number, t1 = t0): Ephem {
+  const e = ephs.find((x) => t0 >= x.t0 && t1 <= x.t1);
+  if (!e) throw new Error(OUTSIDE);
+  return e;
+}
 
 // ponytail: unbounded cache, fine for a session's handful of sites; LRU if people script hundreds
 const horizons = new Map<string, Promise<Horizon>>();
@@ -39,24 +54,34 @@ async function hor(site: Site): Promise<Horizon> {
   return p;
 }
 
+/** DSN station bits per series sample (0 when no table covers it). */
+function dsnBits(s: { t: Float64Array }, d: Dsn | null): Uint8Array {
+  const out = new Uint8Array(s.t.length);
+  if (d) for (let i = 0; i < out.length; i++) { const k = Math.round((s.t[i] - d.t0) / d.stepMs); out[i] = k >= 0 && k < d.bits.length ? d.bits[k] : 0; }
+  return out;
+}
+
 async function handle(req: Request): Promise<unknown> {
-  const { eph } = await init();
+  const { ephs, dsn } = await init();
   switch (req.type) {
     case 'range':
-      return { t0: eph.t0, t1: eph.t1 };
+      return { t0: ephs[0].t0, t1: ephs[0].t1, ranges: ephs.map((e) => ({ t0: e.t0, t1: e.t1 })) };
     case 'scenario': {
       const h = await hor(req.site);
       // No silent clamp: a shifted or truncated window would be compared as if it were the asked-for one.
       const t0 = req.t, t1 = t0 + (req.days ?? 29.5) * 86400e3;
-      if (t0 < eph.t0 || t1 > eph.t1) throw new Error('window is outside the 2024–2040 ephemeris');
+      const eph = pick(ephs, t0, t1);
       const s = series(eph, req.site, h, t0, t1, req.stepMs ?? 3600e3, req.earthMargin ?? 0);
       const m = metrics(s);
       const u = req.mc === false ? null : monteCarlo(s, h, req.earthMargin ?? 0);
-      const res: ScenarioResult = { horizon: h, series: s, metrics: m, uncertainty: u };
+      const stepH = s.stepMs / 3600e3;
+      const mission: Mission = { commsHours: commsHours(s, dsn), battery: battery(s.sunFrac, stepH, req.power), dsn: dsnBits(s, dsn) };
+      const res: ScenarioResult = { horizon: h, series: s, metrics: m, uncertainty: u, mission };
       return res;
     }
     case 'strip': {
       const h = await hor(req.site);
+      const eph = pick(ephs, req.t0);
       const t0 = eph.clamp(req.t0), t1 = eph.clamp(req.t1);
       const s = series(eph, req.site, h, t0, t1, req.stepMs ?? 3600e3, req.earthMargin ?? 0);
       const res: StripResult = { t0, stepMs: s.stepMs, sunFrac: s.sunFrac, earthVis: s.earthVis };
