@@ -2,7 +2,7 @@
 // Pure layout maths (unit-tested) + one canvas draw. No worker calls, no DOM beyond the canvas.
 
 export const STEPS = 708;            // 29.5 d hourly, as the scenario series
-export const PITCH = 42;             // px per scenario lane, constant so the dock never jumps when a slip is set
+export const PITCH = 26;             // px per scenario lane, constant so the dock never jumps when a slip is set
 export const TOP = 8, AXIS_H = 22;
 
 /** The two arrays a lane draws; structurally a core Series. */
@@ -18,8 +18,8 @@ export function laneBoxes(n: number, slip: boolean): LaneBox[] {
   return Array.from({ length: n }, (_, i) => {
     const y = TOP + i * PITCH;
     return slip
-      ? { y, sun: [y, 12], earth: [y + 13, 7], ghostSun: [y + 24, 5], ghostEarth: [y + 30, 4] }
-      : { y, sun: [y, 18], earth: [y + 20, 12] };
+      ? { y, sun: [y, 7], earth: [y + 8, 4], ghostSun: [y + 14, 4], ghostEarth: [y + 19, 3] }
+      : { y, sun: [y, 10], earth: [y + 12, 7] };
   });
 }
 

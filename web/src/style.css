@@ -248,7 +248,7 @@ table.m { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-
 .sw.sun { background: var(--sun); } .sw.earth { background: var(--earth); }
 .lanes { display: grid; grid-template-columns: 36px minmax(0, 1fr); padding-right: 14px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 .lane-badges { padding-top: 8px; }
-.lane-badges .badge { display: grid; margin: 6px auto 16px; cursor: pointer; }
+.lane-badges .badge { display: grid; margin: 0 auto 6px; cursor: pointer; }
 .lane-badges .badge:hover { color: var(--fg); }
 .plot { position: relative; cursor: col-resize; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .plot:focus-visible { outline-offset: -1px; }

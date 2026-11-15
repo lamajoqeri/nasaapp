@@ -364,7 +364,6 @@ const MARKUP = `
         <li><i class="ln tick"></i>each day after landing, on the Sun's path</li>
         <li><i class="ln land"></i>terrain, up to its horizon line</li>
       </ul>
-      <p id="sky-note" class="foot"></p>
     </div>
   </div>
   <footer class="sky-time">
@@ -384,28 +383,10 @@ export function mountSky(d: InspectorDeps): void {
   const cur = () => d.scenarios()[d.selected()];
 
   let model: SkyModel = { mode: 'zoom', durationDays: missionDays() }, q: Geom | undefined;
-  let lastIdx = -1, lastPlaying: boolean | null = null, lastText = '';
+  let lastIdx = -1, lastPlaying: boolean | null = null;
   const plot = new Plot($<HTMLCanvasElement>('#sky-cv'),
-    (g, W, H) => { q = drawSky(g, W, H, model); note(); },
+    (g, W, H) => { q = drawSky(g, W, H, model); },
     (g) => { if (q) drawBodies(g, q, model, d.hours()); });
-
-  function note() {
-    const big: string[] = [];
-    if (q && model.result) {
-      // smallest drawn radius over the window: the scale shrinks above the zoom knee, so use each body's highest point
-      const s = model.result.series, top = (el: ArrayLike<number>) => { let m = -90; for (let i = 0; i < el.length; i++) if (el[i] > m) m = el[i]; return m; };
-      const px = (rad: number, el: ArrayLike<number>) => rad * radialScale(top(el), model.mode) * q!.R;
-      if (px(s.sunRadius[0], s.sunEl) < 3) big.push('Sun');
-      if (px(EARTH_R, s.earthEl) < 3) big.push('Earth');
-    }
-    const size = big.length ? `The ${big.join(' and ')} ${big.length > 1 ? 'disks are' : 'disk is'} drawn larger than life so ${big.length > 1 ? 'they stay' : 'it stays'} visible: not to scale.`
-      : 'The Sun and Earth disks are at their true angular size, measured along elevation.';
-    const scale = model.mode === 'zoom'
-      ? `Horizon zoom stretches elevations from ${SKY_FLOOR.zoom}° to +${ZOOM_TOP}°; the sky above ${ZOOM_TOP}° is squeezed into the centre, and azimuth is not stretched, so shapes are taller than they are wide.`
-      : `True sky is linear in angle from the zenith down to ${SKY_FLOOR.true}°.`;
-    const text = `${scale} ${size} Paths cover the ${model.durationDays} d mission, then continue faintly to the end of the lunar day.`.replace(/-/g, '−');
-    if (text !== lastText) { lastText = text; $('#sky-note').textContent = text; }
-  }
 
   /** Scenario, result, scale or mission length may have changed. */
   function refresh() {

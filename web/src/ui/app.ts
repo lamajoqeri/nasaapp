@@ -971,7 +971,6 @@ export async function start(root: HTMLElement) {
       <div class="dock-r">
         <div class="slip-head"><label class="lbl" for="slip">Landing delayed by</label><output id="slipv">0 d</output></div>
         <input id="slip" type="range" min="0" max="60" value="0">
-        <p class="hint">Each scenario is recomputed for the later date and shown as a thin lane under the planned one.</p>
       </div>
     </footer>
 

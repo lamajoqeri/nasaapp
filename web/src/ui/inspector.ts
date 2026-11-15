@@ -244,7 +244,6 @@ const MARKUP = `
       <div class="sec-head"><h3 class="lbl" id="c-title"></h3><div id="c-legend" class="c-legend" aria-label="Scenario colours"></div></div>
       <p id="c-read" class="c-read"></p>
       <canvas id="c-chart" class="chart" role="img" aria-label="Chart"></canvas>
-      <p id="c-note" class="foot"></p>
     </section>
 
     <section>
@@ -256,13 +255,11 @@ const MARKUP = `
 
     <section class="via">
       <h3 class="lbl">Viability over <span id="v-dur"></span></h3>
-      <dl class="verdicts">
+      <dl class="verdicts" title="Power: 200 W tracking panel, 100 W load, 1.5 kWh battery. OK = never below 20%, Marginal = dips but never empty, No = empties. Comms: OK = longest gap without DSN contact ≤ 24 h, Gaps = longer, No = none.">
         <div><dt>Power</dt><dd id="v-power"></dd></div>
         <div><dt>Comms</dt><dd id="v-comms"></dd></div>
       </dl>
       <div class="v-all"><span class="lbl">All scenarios</span><span class="v-key">power · comms</span><div id="v-all"></div></div>
-      <p class="foot">Power: with a 200 W Sun-tracking panel, a constant 100 W load and 1.5 kWh of storage that starts full, OK means the charge never drops below 20%, Marginal means it does but never reaches zero, No means the battery empties.
-        Comms: OK means the longest stretch without Deep Space Network contact is 24 h or less, Gaps means it is longer, No means there is no contact. Where there is no station data, Earth in view is used instead.</p>
     </section>
 
     <p id="i-cap" class="cap"></p>
@@ -279,10 +276,6 @@ const MARKUP = `
       </div>
     </section>
 
-    <p class="foot">The chart, the windows and the verdicts cover the mission length chosen above; the figures under Details cover the 29.5 days (one lunar day) after landing.
-      ± and the band on the power chart are terrain-model uncertainty near the site, a lower bound.
-      Deep Space Network contact needs Earth in view from the site and the Moon above 10° at Goldstone, Madrid or Canberra.
-      Dates from 2024 to 2040 are available, plus 1969 to 1972 for the Apollo landings.</p>
   </div>`;
 
 export interface InspectorHandle {
@@ -300,12 +293,8 @@ export interface InspectorHandle {
   resize(): void;
 }
 
-const NOTES: Record<Metric, string> = {
-  power: 'Power = share of the Sun’s disk above the terrain, for a vertical Sun-tracking panel on the mast (as in the battery model). Band: 10 to 90% of terrain-model draws near the site, usually thinner than the line.',
-  elevation: 'Sun’s centre above the terrain horizon in its direction. The disk is 0.27° in radius, so first light arrives just below 0°. Shaded: the selected scenario above the terrain.',
-};
 const TITLES: Record<Metric, string> = { power: 'Solar power, % of rated', elevation: 'Sun above terrain, deg' };
-const WIN_HINT = 'Point at a bar to read how long it lasts';
+const WIN_HINT = '\u00a0'; // empty readout line keeps its height until a bar is hovered
 
 export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHandle {
   bindInspector(d);
@@ -477,7 +466,6 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     for (const b of el.querySelectorAll<HTMLElement>('[data-metric]')) b.setAttribute('aria-pressed', String(b.dataset.metric === state.metric));
     for (const b of el.querySelectorAll<HTMLElement>('[data-dur]')) b.setAttribute('aria-pressed', String(+b.dataset.dur! === state.durationDays));
     $('#c-title').textContent = TITLES[state.metric];
-    $('#c-note').textContent = NOTES[state.metric];
     const more = $('#i-more'), was = more.hidden;
     more.hidden = !state.details;
     $('#i-details').setAttribute('aria-expanded', String(state.details));
