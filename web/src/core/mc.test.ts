@@ -10,7 +10,7 @@ function setup(sigDeg: number, n = 120): { s: Series; h: Horizon } {
   const s: Series = {
     t: Float64Array.from({ length: n }, (_, i) => i * 3600e3), stepMs: 3600e3,
     sunAz: Float32Array.from({ length: n }, (_, i) => (i * 3) % 360), sunEl: Float32Array.from({ length: n }, (_, i) => -1.5 + (3 * i) / (n - 1)),
-    sunFrac: new Float32Array(n), sunRadius: new Float32Array(n).fill(0.27),
+    sunFrac: new Float32Array(n), sunRadius: new Float32Array(n).fill(0.27), eclipse: new Float32Array(n),
     earthAz: new Float32Array(n), earthEl: new Float32Array(n).fill(5), earthVis: new Uint8Array(n).fill(1),
   };
   return { s, h };

@@ -1,5 +1,5 @@
 import { Ephem } from './ephem';
-import { DEG, enu, horizonAt, R, SUN_R } from './geom';
+import { DEG, EARTH_R, enu, horizonAt, R, SUN_R } from './geom';
 import type { Horizon } from './horizon';
 
 export interface Site { lat: number; lon: number; mast: number }
@@ -9,6 +9,7 @@ export interface Series {
   stepMs: number;
   sunAz: Float32Array; sunEl: Float32Array; sunFrac: Float32Array;
   sunRadius: Float32Array; // deg
+  eclipse: Float32Array;   // share of the Sun's disk behind Earth, 0..1 (already applied to sunFrac)
   earthAz: Float32Array; earthEl: Float32Array;
   earthVis: Uint8Array;
 }
@@ -18,7 +19,7 @@ export function series(eph: Ephem, site: Site, hor: Horizon, t0: number, t1: num
   const n = Math.max(1, Math.floor((t1 - t0) / stepMs)); // [t0, t1): 29.5 d hourly = 708 steps, as prep/geom.py
   const s: Series = {
     t: new Float64Array(n), stepMs,
-    sunAz: new Float32Array(n), sunEl: new Float32Array(n), sunFrac: new Float32Array(n), sunRadius: new Float32Array(n),
+    sunAz: new Float32Array(n), sunEl: new Float32Array(n), sunFrac: new Float32Array(n), sunRadius: new Float32Array(n), eclipse: new Float32Array(n),
     earthAz: new Float32Array(n), earthEl: new Float32Array(n), earthVis: new Uint8Array(n),
   };
   const { e, n: no, u } = enu(site.lat, site.lon);
@@ -37,14 +38,30 @@ export function series(eph: Ephem, site: Site, hor: Horizon, t0: number, t1: num
     s.t[i] = t;
     eph.at(t, v);
     const [saz, sel, sd] = look(v[0], v[1], v[2]);
-    const [eaz, eel] = look(v[3], v[4], v[5]);
+    const [eaz, eel, ed] = look(v[3], v[4], v[5]);
     const rad = Math.asin(SUN_R / sd) / DEG;
-    s.sunAz[i] = saz; s.sunEl[i] = sel; s.sunRadius[i] = rad;
-    s.sunFrac[i] = frac(sel - horizonAt(hor.el, saz), rad);
+    const ecl = eclipse(saz, sel, rad, eaz, eel, Math.asin(EARTH_R / ed) / DEG);
+    s.sunAz[i] = saz; s.sunEl[i] = sel; s.sunRadius[i] = rad; s.eclipse[i] = ecl;
+    s.sunFrac[i] = frac(sel - horizonAt(hor.el, saz), rad) * (1 - ecl);
     s.earthAz[i] = eaz; s.earthEl[i] = eel;
     s.earthVis[i] = eel - horizonAt(hor.el, eaz) > earthMargin ? 1 : 0;
   }
   return s;
+}
+
+/** Share (0..1) of the Sun's disk (radius r1) hidden by Earth's disk (radius r2), small-angle circles. Mirrors prep/geom.py.
+ * ponytail: solid Earth, no atmosphere (real umbra is ~2% wider). */
+export function eclipse(saz: number, sel: number, r1: number, eaz: number, eel: number, r2: number): number {
+  const e1 = sel * DEG, e2 = eel * DEG;
+  const c = Math.sin(e1) * Math.sin(e2) + Math.cos(e1) * Math.cos(e2) * Math.cos((saz - eaz) * DEG);
+  const d = Math.acos(Math.max(-1, Math.min(1, c))) / DEG;
+  if (d >= r1 + r2) return 0;
+  if (d <= Math.abs(r2 - r1)) return Math.min(1, (r2 / r1) ** 2);
+  const cl = (x: number) => Math.max(-1, Math.min(1, x));
+  const lens = r1 * r1 * Math.acos(cl((d * d + r1 * r1 - r2 * r2) / (2 * d * r1)))
+    + r2 * r2 * Math.acos(cl((d * d + r2 * r2 - r1 * r1) / (2 * d * r2)))
+    - 0.5 * Math.sqrt(Math.max(0, (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2)));
+  return Math.max(0, Math.min(1, lens / (Math.PI * r1 * r1)));
 }
 
 /** Visible fraction of a disk whose centre is `clear` deg above the horizon. */

@@ -91,7 +91,7 @@ Read these with their limits:
 - Earth visibility uses Earth's centre. NASA's published maps count any part of Earth's disk (0.95 deg radius), so their percentages are higher.
 - The uncertainty bands cover elevation-model error near the site only, were calibrated at one site, and came out about 1.5x narrower than NASA's own terrain realisations imply on held-out data. Treat them as a lower bound. The offset between our 20 m result and the 5 m terrain (0.1-0.4% of yearly illumination here) is larger than the band itself.
 - The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
-- Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
+- Power is the visible fraction of the solar disk (terrain and Earth eclipses taken out) for a Sun-tracking panel. No thermal model, no link budget.
 - The battery model and the Deep Space Network table are simple and have unit tests only; they are not validated against an external source. The DSN table uses a 10 deg elevation mask and a simplified Earth rotation model.
 
 ## Run it

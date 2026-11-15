@@ -4,7 +4,7 @@ import { Dem } from './dem';
 import { Ephem } from './ephem';
 import { azel } from './geom';
 import { horizon } from './horizon';
-import { metrics, series } from './series';
+import { eclipse, metrics, series } from './series';
 import { monteCarlo } from './mc';
 
 const DATA = new URL('../../public/data/', import.meta.url);
@@ -101,5 +101,14 @@ describe('real site sanity', () => {
     console.log(`horizon ${ms.toFixed(0)} ms; lit ${m.pctLit.toFixed(1)}% earth ${m.pctEarth.toFixed(1)}% longest dark ${m.longestDarkHours} h; MC lit ${u.mean.pctLit.toFixed(1)}±${u.std.pctLit.toFixed(1)}`);
     expect(Math.max(...s.sunEl)).toBeLessThan(2.5);
     expect(m.pctAnyLit).toBeGreaterThan(60);
+  });
+});
+
+describe('eclipse', () => {
+  it('Earth disk over the Sun: none, full, half, and an annulus when Earth is smaller', () => {
+    expect(eclipse(10, 5, 0.27, 10, 8, 0.95)).toBe(0);            // 3 deg apart
+    expect(eclipse(10, 5, 0.27, 10, 5.1, 0.95)).toBe(1);          // Sun inside Earth's disk
+    expect(eclipse(0, 0, 0.27, 0, 0.27, 0.27)).toBeCloseTo(0.391, 3); // equal disks, one radius apart
+    expect(eclipse(0, 0, 0.27, 0, 0, 0.135)).toBeCloseTo(0.25, 6);    // small disk fully inside: area ratio
   });
 });

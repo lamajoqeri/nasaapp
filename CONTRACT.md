@@ -66,7 +66,10 @@ v_body = ephem(t) * 1000 - site           # ephem = Moon centre -> body, MOON_ME
 az, el as above                            # the site subtraction matters for Earth (0.26 deg)
 sun_radius  = asin(695700e3 / |v_sun|)     # ~0.266 deg
 x = clamp((el_sun - horizon_el(az_sun)) / sun_radius, -1, 1)
-sunFrac = 1 - (acos(x) - x*sqrt(1 - x^2)) / pi      # visible fraction of the disk, 0..1
+sunFrac = 1 - (acos(x) - x*sqrt(1 - x^2)) / pi      # share of the disk above the terrain, 0..1
+earth_radius = asin(6371e3 / |v_earth|)              # ~0.95 deg
+eclipse = share of the Sun's disk covered by Earth's disk (circle overlap, separation = angle between v_sun and v_earth)
+sunFrac *= 1 - eclipse                               # lunar eclipses: Earth hides the Sun for a few hours
 earthVisible = el_earth - horizon_el(az_earth) > margin   # margin default 0 deg, Earth centre
 ```
 
