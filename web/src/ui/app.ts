@@ -10,7 +10,7 @@ import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeli
 import { compareTable } from './compare';
 import { inspectorState, mountInspector, readHash as readInspectorHash, writeHash as writeInspectorHash, type InspectorHandle } from './inspector';
 import { mountSky, readHash as readSkyHash, skyState, writeHash as writeSkyHash } from './sky';
-import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools } from './actions';
+import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools, utcTime } from './actions';
 import { mountAgent } from '../agent/panel';
 import type { View3DHandle } from '../view3d';
 import { regionAt, type RegionTile } from '../view3d/regions';
@@ -596,16 +596,13 @@ function siteOf(q: string): SiteRec {
   if (!s) throw new Error(`Unknown site "${q}". Use ${toolName('sites.search')} to find a catalogue id, or give lat and lon.`);
   return s;
 }
-function timeOf(s: string): number {
-  const t = Date.parse(/T/.test(s) && !/(Z|[+-]\d\d:?\d\d)$/i.test(s) ? s + 'Z' : s);
-  if (Number.isNaN(t)) throw new Error(`Cannot read "${s}" as a UTC time. Use ISO 8601, for example 2027-03-02T00:00Z.`);
-  return clampT(t);
-}
+const timeOf = (s: string) => clampT(utcTime(s));
 
 interface SpecArgs { site?: string; lat?: number; lon?: number; t?: string; mast?: number }
 /** `spec` with the given fields replaced. A site sets the position; lat/lon make it a custom point. Throws on bad input. */
 function patch(spec: Spec, a: SpecArgs): Spec {
   const out = { ...spec };
+  if (a.site != null && a.site !== 'custom' && (a.lat != null || a.lon != null)) throw new Error('Give site or lat/lon, not both.');
   if (a.site != null && a.site !== 'custom') { const s = siteOf(a.site); out.site = s.id; out.lat = s.lat; out.lon = s.lon; }
   else if (a.lat != null || a.lon != null) {
     const lat = a.lat ?? spec.lat, lon = a.lon ?? spec.lon;
@@ -730,6 +727,11 @@ function registerActions() {
     mast: { type: 'integer' as const, enum: MASTS, description: 'Height of the panel/antenna above the ground in metres.' },
   };
 
+  /** What a scenario action returns, read after the wait: the user may have changed or removed the scenario meanwhile. */
+  const outcome = (did: string, sc: Scenario) => (scs.includes(sc)
+    ? { summary: `${did} ${oneLine(sc)}`, scenario: describe(sc) }
+    : { summary: `${did}: the user removed that scenario before this finished`, removed: true, selected: LETTERS[sel], scenarios: scs.map((s) => ({ id: idOf(s), name: nameOf(s), landing: iso(s.spec.t) })) });
+
   register({
     name: 'state.get',
     description: 'Read everything on screen as JSON: the scenarios (id, site, position, landing time, mast, headline metrics), the selected scenario, the active tab, the stage view (3D or map, map region and overlay), the time scrubber, the landing delay and whether playback is running. Call this before acting when unsure of the current state.',
@@ -755,7 +757,7 @@ function registerActions() {
       if ((a.lat == null) !== (a.lon == null)) throw new Error('Give lat and lon together.');
       const sc = add(patch(cur().spec, a));
       await settled(sc);
-      return { summary: `Added scenario ${oneLine(sc)}`, scenario: describe(sc) };
+      return outcome('Added scenario', sc);
     },
   });
   register({
@@ -768,7 +770,7 @@ function registerActions() {
       changed(sc);
       if (a.site != null && sc === cur()) map?.focus(next.lat, next.lon);
       await settled(sc);
-      return { summary: `Updated scenario ${oneLine(sc)}`, scenario: describe(sc) };
+      return outcome('Updated scenario', sc);
     },
   });
   register({
@@ -780,7 +782,7 @@ function registerActions() {
       if (!(m > 0 && m <= 5000)) throw new Error('m must be above 0 and at most 5000 metres.');
       nudge(sc, dir, m);
       await settled(sc);
-      return { summary: `Moved ${m} m ${dir}: scenario ${oneLine(sc)}`, scenario: describe(sc) };
+      return outcome(`Moved ${m} m ${dir}: scenario`, sc);
     },
   });
   register({
@@ -803,7 +805,7 @@ function registerActions() {
       select(scs.indexOf(sc));
       if (editor != null) setEditor(editor, byUser);
       await settled(sc);
-      return { summary: `Selected scenario ${oneLine(sc)}`, scenario: describe(sc) };
+      return outcome('Selected scenario', sc);
     },
   });
   register({
@@ -818,9 +820,13 @@ function registerActions() {
   });
   register({
     name: 'time.play',
-    description: 'Start playback: the scrubber sweeps one lunar day in about 15 seconds and loops until paused.',
+    description: 'Start playback: the scrubber sweeps one lunar day in about 15 seconds and loops until paused. Opens the mission tab if another tab is showing.',
     schema: schema(),
-    run: async () => { setPlaying(true); return { playing }; },
+    run: async () => {
+      if (view !== 'mission') await setView('mission'); // the clock is not visible on the Evidence page
+      setPlaying(true);
+      return { playing, tab: tabNow() };
+    },
   });
   register({
     name: 'time.pause',
@@ -835,7 +841,8 @@ function registerActions() {
     run: async ({ days }: { days: number }) => {
       if (!(days >= 0 && days <= 60)) throw new Error('days must be 0 to 60.');
       await setSlip(days);
-      return { summary: days ? `Landing delayed by ${days} d` : 'Landing delay off', slipDays: slip, scenarios: scs.map(describe) };
+      // read `slip`, not `days`: the user may have dragged the slider while this waited
+      return { summary: (slip ? `Landing delayed by ${slip} d` : 'Landing delay off') + (slip !== days ? ` (the user changed it from ${days} d meanwhile)` : ''), slipDays: slip, scenarios: scs.map(describe) };
     },
   });
   register({
@@ -872,17 +879,20 @@ function registerActions() {
     run: async (a: { fit?: 'scenarios'; lat?: number; lon?: number; km_across?: number; factor?: number }) => {
       const point = a.lat != null || a.lon != null;
       if (point && (a.lat == null || a.lon == null)) throw new Error('give both lat and lon.');
+      if (point && (!(Math.abs(a.lat!) <= 90) || !(a.lon! >= -180 && a.lon! <= 360))) throw new Error(BAD_COORD);
       const kinds = [a.fit != null, point || a.km_across != null, a.factor != null].filter(Boolean).length;
       if (kinds !== 1) throw new Error('use exactly one of: fit, lat+lon/km_across, factor.');
-      if (a.km_across != null && !(a.km_across > 0)) throw new Error('km_across must be > 0.');
-      if (a.factor != null && !(a.factor > 0)) throw new Error('factor must be > 0.');
+      if (a.km_across != null && !(a.km_across >= 0.1 && a.km_across <= 11000)) throw new Error('km_across must be 0.1 to 11000 (the Moon is about 10900 km around).');
+      if (a.factor != null && !(a.factor >= 0.01 && a.factor <= 100)) throw new Error('factor must be 0.01 to 100.');
       if (view !== 'mission') await setView('mission');
       if (mode !== 'map') setMode('map');
-      if (a.fit) map!.fit(scs.map((sc) => [sc.spec.lat, sc.spec.lon]));
-      else if (a.factor != null) map!.zoomBy(a.factor);
-      else map!.frame(a.lat, a.lon, a.km_across);
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // let a first layout apply it
-      return { view: viewState() };
+      const applied = a.fit ? map!.fit(scs.map((sc) => [sc.spec.lat, sc.spec.lon]))
+        : a.factor != null ? map!.zoomBy(a.factor)
+        : map!.frame(a.lat, a.lon, a.km_across);
+      // On a first open the map applies it at its first layout. ponytail: 5 s cap so a map that never lays out
+      // (hidden tab) cannot hang the agent; the result then says so.
+      const ok = await Promise.race([applied.then(() => true), new Promise<boolean>((r) => setTimeout(r, 5000, false))]);
+      return ok ? { view: viewState() } : { view: viewState(), pending: true, note: 'The map has not drawn yet; the view applies when it does.' };
     },
   });
   /** The point of a terrain action: a scenario's position, or lat+lon. */
@@ -902,10 +912,10 @@ function registerActions() {
     lon: num('Longitude in degrees east, -180 to 360.'),
   };
   const PGDA_NOTE = 'sunPct and earthPct are NASA PGDA long-term averages over all dates (% of time the Sun / Earth is visible, poleward of ~85°S; null outside), unlike scenario metrics, which are for the chosen landing date.';
-  const UNITS = { elevation_m: 'm vs the 1737.4 km reference radius', slope_deg: 'degrees, central differences over ±1 DEM pixel', resolution_m: 'DEM pixel spacing used (20 m in the fine polar tiles, 240 m elsewhere near the pole)', sunPct: '% of time, PGDA average', earthPct: '% of time, PGDA average' };
+  const UNITS = { elevation_m: 'm vs the 1737.4 km reference radius', slope_deg: 'degrees, central differences over ±1 DEM pixel', resolution_m: 'DEM pixel spacing used, m: 20 in the fine polar tiles, 240 elsewhere near the south pole, several km on the whole-Moon grid away from it', sunPct: '% of time, PGDA average', earthPct: '% of time, PGDA average' };
   register({
     name: 'terrain.sample',
-    description: `Read the terrain at a scenario's position (id) or at lat+lon: elevation (m), surface slope (degrees, from the finest DEM there: 20 m pixels in the Shackleton, de Gerlache, Malapert, Haworth and Mouton/Nobile tiles, else 240 m, which smooths out local roughness), and the NASA PGDA average sunlight and Earth-visibility % (long-term averages over all dates, not the scenario's date). Use it to judge how flat a landing spot is. Does not move anything.`,
+    description: `Read the terrain at a scenario's position (id) or at lat+lon: elevation (m), surface slope (degrees, from the finest DEM there: 20 m pixels in the Shackleton, de Gerlache, Malapert, Haworth and Mouton/Nobile tiles, else 240 m near the south pole and several km away from it, which smooths out local roughness; the result gives resolution_m), and the NASA PGDA average sunlight and Earth-visibility % (long-term averages over all dates, not the scenario's date). Use it to judge how flat a landing spot is. Does not move anything.`,
     schema: schema(WHERE),
     run: async (a: { id?: string; lat?: number; lon?: number }) => {
       const [lat, lon] = pointOf(a), p = await core.terrain(lat, lon);
@@ -930,6 +940,7 @@ function registerActions() {
       if (!(limit >= 1 && limit <= 10)) throw new Error('limit must be 1 to 10.');
       const r = await core.terrainSearch(lat, lon, { radius, maxSlope, limit });
       if (!r.centre) throw new Error('No elevation data covers that point.');
+      if (r.step_m >= radius) throw new Error(`The elevation data at that point has ${r.centre.resolution_m} m pixels, coarser than the ${radius} m search radius, so there is nothing finer to search. ${toolName('terrain.search')} works near the south pole; use ${toolName('terrain.sample')} for the single reading here.`);
       return { ...(a.id != null ? { id: idOf(scOf(a.id)) } : {}), ...r, units: { ...UNITS, distance_m: 'm from the centre', bearing_deg: 'degrees clockwise from north' }, note: PGDA_NOTE };
     },
   });
@@ -939,6 +950,12 @@ function registerActions() {
     schema: schema({ tab: { type: 'string', enum: ['mission', 'compare', 'evidence'], description: 'Tab to show.' } }, ['tab']),
     run: async ({ tab }: { tab: 'mission' | 'compare' | 'evidence' }) => {
       const focus = byUser;
+      // Narrow screens: the compare sheet is a full-screen overlay (style.css, max-width 1099px) and would cover the
+      // chat the agent is answering in. Only the user's own Compare button opens it there.
+      if (tab === 'compare' && !focus && !cmpOpen && matchMedia('(max-width: 1099px)').matches) {
+        if (view !== 'mission') await setView('mission');
+        return { summary: 'Compare table not opened on this narrow screen', tab: tabNow(), note: 'On this narrow screen the compare table would cover the chat, so it was not opened. Give the comparison in your reply; the user can open the table with the Compare button.' };
+      }
       if (tab === 'evidence') { if (view !== 'evidence') await setView('evidence'); } // compare stays as it was, for coming back
       else {
         if (view !== 'mission') await setView('mission');

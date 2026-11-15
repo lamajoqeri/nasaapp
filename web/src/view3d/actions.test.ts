@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actions, run } from '../ui/actions';
+import { actions, register, run, schema } from '../ui/actions';
 import { bindView3D, onView3dChange, view3dState, wantedRenderMode, type CameraState, type RenderMode, type View3DBinding } from './actions';
 
 /** Stand-in for the mounted view: scenarios A, B in the region, C outside. */
@@ -59,11 +59,17 @@ describe('3D view actions', () => {
     expect(await run('camera.set', { preset: 'stand-at-site' })).toMatchObject({ preset: 'stand-at-site', scenario: 'A' }); // first in region
     expect(await run('camera.set', { preset: 'stand-at-site', scenario: 'B' })).toMatchObject({ preset: 'stand-at-site', scenario: 'B' });
 
-    // Outside the region: an error in the result, not a throw, and the camera stays put.
-    const res = await run('camera.set', { preset: 'stand-at-site', scenario: 'C' }) as CameraState & { error?: string };
-    expect(res.error).toMatch(/outside the 3D region/);
-    expect(res).toMatchObject({ preset: 'stand-at-site', scenario: 'B' });
-    expect((await run('camera.set', { preset: 'stand-at-site', scenario: 'D' }) as { error?: string }).error).toMatch(/no scenario D/);
+    // Outside the region: the action fails (the model sees is_error) and the camera stays put.
+    await expect(run('camera.set', { preset: 'stand-at-site', scenario: 'C' })).rejects.toThrow(/outside the 3D region/);
+    expect(view3dState().camera).toEqual({ preset: 'stand-at-site', scenario: 'B' });
+    await expect(run('camera.set', { preset: 'stand-at-site', scenario: 'D' })).rejects.toThrow(/no scenario D/);
+
+    // With the app shell's view.set registered, camera.set brings the 3D stage on screen first.
+    const shown: unknown[] = [];
+    register({ name: 'view.set', description: '', schema: schema({ mode: { type: 'string' } }), run: async (a) => { shown.push(a); } });
+    await run('camera.set', { preset: 'stand-at-site', scenario: 'B' });
+    expect(shown).toEqual([{ mode: '3d' }]);
+    actions.delete('view.set');
 
     bindView3D(undefined);
     expect(view3dState()).toEqual({ mounted: false, region: null, renderMode: 'realistic', camera: { preset: 'stand-at-site', scenario: 'B' } });

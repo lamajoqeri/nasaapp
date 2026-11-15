@@ -2,7 +2,7 @@
 // AI agent both go through these. No three.js / CSS imports: the app shell imports this statically so the
 // actions exist before (and whether or not) the lazily loaded view is on screen; requests made while the
 // view is not mounted are remembered and applied when it is.
-import { register, type JSONSchema } from '../ui/actions';
+import { actions, register, run, type JSONSchema } from '../ui/actions';
 
 export type RenderMode = 'realistic' | 'clear';
 export type CameraPreset = 'overview' | 'stand-at-site';
@@ -44,7 +44,8 @@ export function onView3dChange(f: () => void): () => void {
   return () => listeners.delete(f);
 }
 
-function applyCamera(v: View3DBinding, preset: CameraPreset, scenario: string | undefined): CameraState & { error?: string } {
+/** Throws when the camera cannot stand where asked; it then stays put. */
+function applyCamera(v: View3DBinding, preset: CameraPreset, scenario: string | undefined): CameraState {
   if (preset === 'overview') {
     v.setCamera('orbit');
     return v.cameraState();
@@ -53,12 +54,12 @@ function applyCamera(v: View3DBinding, preset: CameraPreset, scenario: string | 
   let i: number;
   if (scenario !== undefined) {
     i = sites.findIndex((s) => s.label === scenario);
-    if (i < 0) return { ...cur, error: `There is no scenario ${scenario}.` };
-    if (!sites[i].inRegion) return { ...cur, error: `Scenario ${scenario} is outside the 3D region shown (${v.region()}), so the camera cannot stand there. Select that scenario first to switch region.` };
+    if (i < 0) throw new Error(`There is no scenario ${scenario}.`);
+    if (!sites[i].inRegion) throw new Error(`Scenario ${scenario} is outside the 3D region shown (${v.region()}), so the camera cannot stand there. Select that scenario first to switch region.`);
   } else {
     i = sites.findIndex((s) => s.inRegion && s.label === cur.scenario);
     if (i < 0) i = sites.findIndex((s) => s.inRegion);
-    if (i < 0) return { ...cur, error: `No scenario lies inside the 3D region shown (${v.region()}).` };
+    if (i < 0) throw new Error(`No scenario lies inside the 3D region shown (${v.region()}).`);
   }
   v.setCamera('site', i);
   return v.cameraState();
@@ -69,7 +70,7 @@ export function bindView3D(v: View3DBinding | undefined): void {
   view = v;
   if (!v) return;
   v.setRenderMode(want.renderMode);
-  if (want.camera.preset === 'stand-at-site') applyCamera(v, 'stand-at-site', want.camera.scenario ?? undefined); // best effort
+  if (want.camera.preset === 'stand-at-site') try { applyCamera(v, 'stand-at-site', want.camera.scenario ?? undefined); } catch { /* best effort: stays on the overview */ }
   changed();
 }
 /** Render mode the view should start in. */
@@ -118,23 +119,24 @@ register<{ preset: CameraPreset; scenario?: string }>({
   name: 'camera.set',
   description: 'Move the 3D camera. preset "overview": the orbiting oblique view of the region shown. preset "stand-at-site": stand at a scenario\'s site at mast '
     + 'height, facing the Sun\'s azimuth, with the Sun and Earth drawn at their true positions; pass "scenario" (letter A to D) to choose the site. '
-    + 'Returns { preset, scenario } as now shown; if the scenario is outside the 3D region shown, the camera does not move and the result carries an "error" string. '
-    + 'If the 3D view is not on screen the request is applied when it appears (result has pending: true).',
+    + 'Switches the stage to the 3D view if the map is showing. Returns { preset, scenario } as now shown. Fails, without moving the camera, if the scenario '
+    + 'is outside the 3D region shown. If the 3D view is still loading the request is applied when it appears (result has pending: true).',
   schema: cameraSetSchema,
   async run(args) {
     const a = obj(args, ['preset', 'scenario']);
     if (!PRESETS.includes(a.preset as CameraPreset)) throw new Error('preset must be "overview" or "stand-at-site"');
     if (a.scenario !== undefined && !LETTERS.includes(a.scenario as string)) throw new Error('scenario must be one of A, B, C, D');
     const preset = a.preset as CameraPreset, scenario = preset === 'stand-at-site' ? (a.scenario as string | undefined) : undefined;
+    if (actions.has('view.set')) await run('view.set', { mode: '3d' }); // the app shell's action: brings the 3D stage on screen
     if (!view) {
       want.camera = { preset, scenario: scenario ?? null };
       changed();
       return { summary: 'Camera request saved; it applies when the 3D view is shown', ...want.camera, pending: true };
     }
     const res = applyCamera(view, preset, scenario);
-    if (!res.error) want.camera = { preset: res.preset, scenario: res.scenario };
+    want.camera = { preset: res.preset, scenario: res.scenario };
     changed();
-    const summary = res.error ? 'Camera not moved' : res.preset === 'overview' ? 'Camera: overview' : `Camera: standing at scenario ${res.scenario}`;
+    const summary = res.preset === 'overview' ? 'Camera: overview' : `Camera: standing at scenario ${res.scenario}`;
     return { summary, ...res };
   },
 });

@@ -13,12 +13,15 @@ let mem = '';  // fallback when storage is blocked (private windows): the key th
 // Dev only: a key in web/.env.local (gitignored) is preloaded. Vite folds DEV to false in builds, so it never ships.
 const DEV_KEY: string = import.meta.env.DEV ? (import.meta.env.VITE_ANTHROPIC_API_KEY ?? '') : '';
 
+let forgotten = false; // "Forget key" also drops the dev key, until the page reloads
+
 function key(): string {
-  try { return localStorage.getItem(KEY) ?? (mem || DEV_KEY); } catch { return mem || DEV_KEY; }
+  const fallback = mem || (forgotten ? '' : DEV_KEY);
+  try { return localStorage.getItem(KEY) ?? fallback; } catch { return fallback; }
 }
 export const ready = () => !!key();
 export function signOut(): void {
-  mem = '';
+  mem = ''; forgotten = true;
   try { localStorage.removeItem(KEY); } catch { /* nothing stored */ }
 }
 
@@ -63,6 +66,14 @@ export async function explain(e: unknown): Promise<{ text: string; auth?: boolea
   if (e instanceof A.RateLimitError) return { text: 'Rate limited by the API. Wait a moment and send again.' };
   if (e instanceof A.APIConnectionError) return { text: 'Could not reach api.anthropic.com. Check the connection and send again.' };
   if (e instanceof A.BadRequestError && /prompt is too long/i.test(e.message)) return { text: TOO_LONG };
-  if (e instanceof A.APIError) return { text: `The API returned an error (${e.status ?? 'no status'}): ${e.message}` };
+  if (e instanceof A.APIError) {
+    // e.message is "<status> <raw JSON body>"; the body's own message is the readable part. Errors that arrive
+    // mid-stream have no status, only a type.
+    if (e.type === 'overloaded_error' || e.status === 529) return { text: 'Claude is overloaded right now. Send again in a moment.' };
+    if (e.type === 'rate_limit_error') return { text: 'Rate limited by the API. Wait a moment and send again.' };
+    if ((e.status ?? 0) >= 500 || e.type === 'api_error') return { text: 'The API had a temporary problem. Send again in a moment.' };
+    return { text: `The API returned an error${e.status ? ` (${e.status})` : ''}: ${e.apiMessage ?? e.message}` };
+  }
+  if (e instanceof TypeError && /fetch|network|load failed/i.test(e.message)) return { text: 'Could not reach api.anthropic.com. Check the connection and send again.' };
   return { text: `Something went wrong: ${(e as Error)?.message ?? e}` };
 }
