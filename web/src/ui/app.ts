@@ -1,5 +1,5 @@
 // Shell: top bar, agent rail (scenario chips, editor pop-over, chat), stage (3D / map), inspector, timeline dock,
-// compare sheet, evidence page. Every control calls an action (see "actions" below); the agent uses the same ones.
+// compare sheet, report page. Every control calls an action (see "actions" below); the agent uses the same ones.
 import { core, type Range } from '../core/api';
 import { DEG, enu, R } from '../core/geom';
 import { stripTimeAt } from './strips';
@@ -9,6 +9,7 @@ import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
 import { compareTable } from './compare';
 import { okLatLon, readStageHash, writeStageHash, type MapView } from './hash';
+import { SCENARIO_COLORS } from './charts';
 import { inspectorState, mountInspector, readHash as readInspectorHash, writeHash as writeInspectorHash, type InspectorHandle } from './inspector';
 import { mountSky, readHash as readSkyHash, skyState, writeHash as writeSkyHash } from './sky';
 import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools, utcTime } from './actions';
@@ -18,7 +19,7 @@ import { inSurround, regionAt, type RegionTile } from '../view3d/regions';
 import { onView3dChange, view3dState } from '../view3d/actions'; // registers render.set / camera.set
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
-type View = 'mission' | 'evidence';
+type View = 'mission' | 'report';
 type Mode = '3d' | 'map';
 
 const MASTS = [0, 2, 5, 10];
@@ -46,7 +47,8 @@ const chips = new Map<Scenario, HTMLButtonElement>();
 const pending = new Map<Scenario, Promise<unknown>>(); // worker results in flight, so actions can wait for them
 let sel = 0, slip = 0, hours = 0, playing = false;
 let view: View = 'mission', mode: Mode = '3d', autoMap = false, forced3d = false, cmpOpen = false, editorOpen = false;
-let map: MapHandle | undefined, view3d: View3DHandle | undefined, loading3d = false, err3d = '', evidenceMounted = false;
+let map: MapHandle | undefined, view3d: View3DHandle | undefined, loading3d = false, err3d = '';
+let report: { destroy(): void } | undefined, reportTok = 0;
 let plotW = 0, lanesQueued = false;
 let insp: InspectorHandle | undefined; // right inspector: markup, charts and painting live in ui/inspector.ts
 let regionLoads = 0;
@@ -529,7 +531,7 @@ function setCompare(open: boolean, focus = false) {
 }
 
 /* ------------------------------------------------------------------ URL hash
-   #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&rm=clear&cmp=1&v=evidence
+   #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&rm=clear&cmp=1&v=report
    &cam=site:B&ov=<layer>&mr=g&mc=lat,lon,km (see hash.ts) */
 
 /** Map view from the link, used when the map is first shown (and kept in the URL until then). */
@@ -564,7 +566,7 @@ function loadHash(): Spec[] {
   const p = new URLSearchParams(location.hash.slice(1));
   const int = (k: string, max: number) => Math.min(max, Math.max(0, Math.round(+(p.get(k) ?? 0)) || 0));
   slip = int('slip', 60); sel = int('s', MAX - 1); hours = int('h', STEPS - 1);
-  view = p.get('v') === 'evidence' ? 'evidence' : 'mission';
+  view = ['report', 'evidence'].includes(p.get('v') ?? '') ? 'report' : 'mission'; // v=evidence: links from before the report
   mode = p.get('m') === 'map' ? 'map' : '3d';
   forced3d = p.get('m') === '3d';
   cmpOpen = p.get('cmp') === '1';
@@ -595,22 +597,44 @@ function defaults(): Spec[] {
 
 async function setView(v: View) {
   view = v;
-  if (v === 'evidence') setPlaying(false);
+  if (v === 'report') setPlaying(false);
   $('.shell').dataset.view = v;
-  for (const b of document.querySelectorAll<HTMLElement>('.views [data-view]')) b.setAttribute('aria-selected', String(b.dataset.view === v));
+  $('#report-btn').setAttribute('aria-pressed', String(v === 'report'));
   saveHash();
   if (v === 'mission') {
+    reportTok++; report?.destroy(); report = undefined;
     showStage();
     requestAnimationFrame(() => { queueLanes(); paintInspector(); }); // canvases were hidden: redraw at real size
-  } else if (!evidenceMounted) {
-    evidenceMounted = true;
-    try {
-      const { mountEvidence } = await import('./evidence');
-      mountEvidence($('#evidence'), { dataBase });
-    } catch (e) {
-      evidenceMounted = false;
-      $('#evidence').textContent = `Could not load this page: ${(e as Error).message}.`;
-    }
+  } else await generateReport();
+}
+
+/** Build the report from the scenarios as they are now. Waits for results still computing. */
+async function generateReport() {
+  const tok = ++reportTok, host = $('#report');
+  report?.destroy(); report = undefined;
+  host.innerHTML = '<p class="r-wait" role="status">Generating report…</p>';
+  try {
+    await Promise.all([...pending.values()].map((p) => p.catch(() => undefined)));
+    const { mountReport } = await import('./report');
+    if (tok !== reportTok) return;
+    writeHash();
+    const live = scs.filter((sc) => sc.base);
+    if (!live.length) throw new Error('no scenario has results yet');
+    host.textContent = '';
+    const r = await mountReport(host, {
+      scenarios: live.map((sc) => {
+        const i = scs.indexOf(sc);
+        return { letter: LETTERS[i], name: nameOf(sc), color: SCENARIO_COLORS[i], sc, site: recOf(sc) };
+      }),
+      skipped: scs.filter((sc) => !sc.base).map(idOf),
+      selected: Math.max(0, live.indexOf(scs[sel])),
+      slip, missionDays: inspectorState().chart.durationDays,
+      dataBase, link: location.href, generatedAt: Date.now(),
+      close: () => ui('tab.set', { tab: 'mission' }),
+    });
+    if (tok === reportTok) report = r; else r.destroy();
+  } catch (e) {
+    if (tok === reportTok) host.textContent = `Could not generate the report: ${(e as Error).message}.`;
   }
 }
 
@@ -868,7 +892,7 @@ function registerActions() {
     description: 'Start playback: the scrubber sweeps one lunar day in about 15 seconds and loops until paused. Opens the mission tab if another tab is showing.',
     schema: schema(),
     run: async () => {
-      if (view !== 'mission') await setView('mission'); // the clock is not visible on the Evidence page
+      if (view !== 'mission') await setView('mission'); // the clock is not visible on the report page
       setPlaying(true);
       return { playing, tab: tabNow() };
     },
@@ -991,9 +1015,9 @@ function registerActions() {
   });
   register({
     name: 'tab.set',
-    description: 'Switch the page: "mission" (stage, inspector, timeline), "compare" (the side-by-side table of all scenarios, over the mission page) or "evidence" (validation against JPL Horizons, NASA maps and LRO photos).',
-    schema: schema({ tab: { type: 'string', enum: ['mission', 'compare', 'evidence'], description: 'Tab to show.' } }, ['tab']),
-    run: async ({ tab }: { tab: 'mission' | 'compare' | 'evidence' }) => {
+    description: 'Switch the page: "mission" (stage, inspector, timeline), "compare" (the side-by-side table of all scenarios, over the mission page) or "report" (generates a research-paper style report on the current scenarios: data, methods, results, validation against JPL Horizons, NASA maps and LRO photos, limitations; regenerated on every call, so call it again after changing scenarios).',
+    schema: schema({ tab: { type: 'string', enum: ['mission', 'compare', 'report'], description: 'Tab to show.' } }, ['tab']),
+    run: async ({ tab }: { tab: 'mission' | 'compare' | 'report' }) => {
       const focus = byUser;
       // Narrow screens: the compare sheet is a full-screen overlay (style.css, max-width 1099px) and would cover the
       // chat the agent is answering in. Only the user's own Compare button opens it there.
@@ -1001,12 +1025,12 @@ function registerActions() {
         if (view !== 'mission') await setView('mission');
         return { summary: 'Compare table not opened on this narrow screen', tab: tabNow(), note: 'On this narrow screen the compare table would cover the chat, so it was not opened. Give the comparison in your reply; the user can open the table with the Compare button.' };
       }
-      if (tab === 'evidence') { if (view !== 'evidence') await setView('evidence'); } // compare stays as it was, for coming back
+      if (tab === 'report') await setView('report'); // always regenerated from the current scenarios; compare stays as it was
       else {
         if (view !== 'mission') await setView('mission');
         if (cmpOpen !== (tab === 'compare')) setCompare(tab === 'compare', focus);
       }
-      return { summary: `Showing ${tabNow() === 'compare' ? 'the compare table' : tabNow() === 'evidence' ? 'the Evidence page' : 'the mission view'}`, tab: tabNow() };
+      return { summary: `Showing ${tabNow() === 'compare' ? 'the compare table' : tabNow() === 'report' ? 'the report' : 'the mission view'}`, tab: tabNow() };
     },
   });
   setSnapshot(appState);
@@ -1023,13 +1047,10 @@ export async function start(root: HTMLElement) {
         <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 1.5a8.5 8.5 0 0 0 0 17 6 8.5 0 0 1 0-17z" fill="currentColor"/></svg>
         <span>Southern-Luna</span>
       </a>
-      <nav class="views" role="tablist" aria-label="Views">
-        <button type="button" role="tab" data-view="mission" aria-selected="true">Mission</button>
-        <button type="button" role="tab" data-view="evidence">Evidence</button>
-      </nav>
       <p class="tagline">Compare landing sites and dates by sunlight and Earth contact</p>
       <div class="top-r">
         <span class="clock"><span class="lbl">Time shown</span><time id="clock"></time></span>
+        <button type="button" id="report-btn" aria-pressed="false" title="Write up the current scenarios as a report">Generate report</button>
         <button type="button" id="cmp" aria-pressed="false" title="Compare all scenarios (c)">Compare</button>
         <button type="button" id="copy">Copy link</button>
       </div>
@@ -1086,7 +1107,7 @@ export async function start(root: HTMLElement) {
       </div>
     </footer>
 
-    <section class="evpage"><div id="evidence"></div></section>
+    <section class="rpage"><div id="report"></div></section>
     <p id="err" class="fatal" role="alert"></p>
   </div>`;
 
@@ -1174,7 +1195,7 @@ export async function start(root: HTMLElement) {
     const t = e.target as HTMLElement;
     if (editorOpen && t.closest?.('.rail') && !t.closest('#editor, #chips')) ui('scenario.select', { id: LETTERS[sel], editor: false });
   });
-  for (const b of document.querySelectorAll<HTMLElement>('.views [data-view]')) b.onclick = () => ui('tab.set', { tab: b.dataset.view === 'mission' && cmpOpen ? 'compare' : b.dataset.view }); // Mission keeps compare open
+  $('#report-btn').onclick = () => ui('tab.set', { tab: 'report' });
   for (const b of document.querySelectorAll<HTMLElement>('.stage-switch [data-mode]')) b.onclick = () => ui('view.set', { mode: b.dataset.mode });
   $('#cmp').onclick = toggleCompare;
   $('#cmp-close').onclick = toggleCompare;

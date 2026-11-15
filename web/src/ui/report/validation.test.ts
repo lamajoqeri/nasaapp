@@ -3,9 +3,9 @@ import { expect, test } from 'vitest';
 import {
   DEFAULT_IMAGE, fmtDeg, fmtIoU, fmtPct, fmtUtc, groupLabel, MODELS, prettyRegion,
   scatterSeries, shapeBench, shapeCalibration, shapeValidation,
-} from './evidence';
+} from './validation';
 
-const real = (f: string): any => JSON.parse(readFileSync(new URL(`../../public/data/${f}`, import.meta.url), 'utf8'));
+const real = (f: string): any => JSON.parse(readFileSync(new URL(`../../../public/data/${f}`, import.meta.url), 'utf8'));
 
 test('number formatting', () => {
   expect(fmtDeg(0.00002, 5)).toBe('0.00002°');

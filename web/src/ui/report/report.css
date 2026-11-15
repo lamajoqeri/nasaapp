@@ -1,0 +1,122 @@
+/* Report: a paper on white, whatever the app theme. Owner: shell agent. Sections, figures and tables are numbered
+   by CSS counters. Classes every section may use: h2/h3, p, ul, .r-fig, .r-tab (in .r-tabwrap), .r-note, .r-eq,
+   .r-kv (<dl>), .cite, .r-chip. Figures are dark panels (app-style canvases); they print dark too. */
+.r-root {
+  --r-ink: #1b1d21; --r-muted: #5b616b; --r-rule: #d9dce1; --r-panel: #111318; --r-link: #1d4f9a;
+  --r-serif: Charter, 'Bitstream Charter', 'Iowan Old Style', 'Sitka Text', Cambria, Georgia, serif;
+  --r-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: light; color: var(--r-ink);
+}
+.r-root :focus-visible { outline: 2px solid var(--r-link); outline-offset: 2px; }
+
+/* ---- toolbar ---- */
+.r-bar { position: sticky; top: 0; z-index: 2; background: rgb(233 235 238 / .92); backdrop-filter: blur(6px); border-bottom: 1px solid #d5d8dd; }
+.r-bar-in { max-width: 852px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 8px; align-items: center; }
+.r-bar button { height: 32px; padding: 0 12px; color: var(--r-ink); background: #fff; border: 1px solid #c3c7ce; border-radius: 4px; font: 500 13px var(--r-sans); }
+.r-bar button:hover:not(:disabled) { border-color: #868c95; }
+.r-bar .r-print { margin-left: auto; color: #fff; background: var(--r-ink); border-color: var(--r-ink); }
+@media (max-width: 1099px) { .r-bar { top: 44px; } } /* the page scrolls under the sticky app bar */
+
+/* ---- page ---- */
+.report {
+  max-width: 820px; margin: 24px auto 64px; padding: 56px 64px 64px; background: #fff; color: var(--r-ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 8px 28px rgb(0 0 0 / .07);
+  font: 17px/1.6 var(--r-serif); overflow-wrap: break-word; counter-reset: sec fig tab;
+}
+.report h1 { font-size: 30px; line-height: 1.2; font-weight: 700; letter-spacing: -.01em; margin: 6px 0 10px; }
+.report h2 { font-size: 22px; line-height: 1.3; font-weight: 700; margin: 0 0 12px; }
+.report h3 { font-size: 18px; line-height: 1.35; font-weight: 700; margin: 28px 0 8px; }
+.report p { margin: 0 0 12px; }
+.report :is(ul, ol) { margin: 0 0 12px; padding-left: 1.4em; }
+.report li { margin: 4px 0; }
+.report b { font-weight: 700; }
+.report a { color: var(--r-link); text-underline-offset: 2px; }
+.report [id] { scroll-margin-top: 64px; }
+@media (max-width: 1099px) { .report [id] { scroll-margin-top: 104px; } }
+
+/* ---- title block ---- */
+.r-title { padding-bottom: 20px; border-bottom: 1px solid var(--r-rule); }
+.r-kicker { font: 600 12px/1.4 var(--r-sans); text-transform: uppercase; letter-spacing: .1em; color: var(--r-muted); }
+.r-byline { color: var(--r-muted); }
+.report .r-scen { list-style: none; padding: 0; margin: 16px 0; font: 14.5px/1.4 var(--r-sans); }
+.r-scen li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; }
+.r-scen span { color: var(--r-muted); font-variant-numeric: tabular-nums; }
+.r-reopen { font: 13px/1.5 var(--r-sans); color: var(--r-muted); }
+.r-reopen a { overflow-wrap: anywhere; }
+.r-toc { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 14px; font: 13.5px/1.7 var(--r-sans); }
+.r-toc:empty { display: none; }
+.r-toc span { font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--r-muted); }
+
+/* ---- sections ---- */
+.report .r-sec { counter-increment: sec; counter-reset: sub; margin-top: 40px; }
+.report .r-sec h2::before { content: counter(sec) '. '; }
+.report .r-sec h3 { counter-increment: sub; }
+.report .r-sec h3::before { content: counter(sec) '.' counter(sub) ' '; }
+.report #r-abstract { counter-increment: none; margin-top: 28px; padding: 18px 22px 8px; background: #f5f6f8; border-radius: 4px; font-size: 16px; }
+.report #r-abstract h2 { font: 700 12px/1.4 var(--r-sans); text-transform: uppercase; letter-spacing: .1em; color: var(--r-muted); margin-bottom: 8px; }
+.report :is(#r-abstract, #r-refs) :is(h2, h3)::before { content: none; }
+.report .r-slot { margin-top: 40px; }
+
+/* ---- figures ---- */
+.report .r-fig { counter-increment: fig; margin: 24px 0; }
+.report .r-fig > img { display: block; max-width: 100%; height: auto; margin: 0 auto; background: var(--r-panel); border-radius: 8px; }
+.report .r-fig :is(img, .r-grid) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.report .r-fig figcaption { font: 13.5px/1.5 var(--r-sans); color: var(--r-muted); margin-top: 8px; }
+.report .r-fig figcaption::before { content: 'Figure ' counter(fig) '. '; font-weight: 700; color: var(--r-ink); }
+/* photo pairs: a dark panel holding a 2-column grid of images, each with a short label */
+.report .r-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: var(--r-panel); border-radius: 8px; }
+.report .r-grid img { display: block; width: 100%; height: auto; border-radius: 3px; }
+.report .r-grid span { display: block; margin-top: 4px; font: 12px/1.4 var(--r-sans); color: #b8bcc4; }
+
+/* ---- tables (booktabs style) ---- */
+.report .r-tabwrap { overflow-x: auto; margin: 24px 0; }
+.report .r-tab { counter-increment: tab; width: 100%; border-collapse: collapse; border-top: 1.5px solid var(--r-ink); border-bottom: 1.5px solid var(--r-ink); font: 13.5px/1.45 var(--r-sans); font-variant-numeric: tabular-nums; }
+.report .r-tab caption { caption-side: top; text-align: left; padding-bottom: 8px; font: 13.5px/1.5 var(--r-sans); color: var(--r-muted); }
+.report .r-tab caption::before { content: 'Table ' counter(tab) '. '; font-weight: 700; color: var(--r-ink); }
+.report .r-tab th, .report .r-tab td { padding: 6px 10px; text-align: left; vertical-align: top; }
+.report .r-tab :is(th, td):first-child { padding-left: 0; }
+.report .r-tab thead th { font-weight: 600; vertical-align: bottom; border-bottom: 1px solid var(--r-ink); }
+.report .r-tab tbody th { font-weight: 500; }
+.report .r-tab tbody tr + tr > * { border-top: 1px solid #eceef1; }
+.report .r-tab small { color: var(--r-muted); font-size: 12px; }
+
+/* ---- small parts ---- */
+.report .r-note { font-size: 14.5px; color: var(--r-muted); }
+.report .r-eq { margin: 16px 0; text-align: center; font-size: 18px; font-style: italic; overflow-x: auto; }
+.report .r-kv { display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); gap: 6px 20px; margin: 16px 0; font: 14.5px/1.45 var(--r-sans); }
+.report .r-kv dt { color: var(--r-muted); }
+.report .r-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.report .cite { white-space: nowrap; }
+.report .cite a { color: inherit; text-decoration: none; }
+.report .cite a:hover { text-decoration: underline; }
+.report .r-chip { display: inline-grid; place-items: center; flex: none; width: 1.6em; height: 1.6em; border-radius: 4px; background: #1b1d21; color: var(--c); font: 600 12px/1 var(--r-sans); vertical-align: .1em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.report .r-status { color: #6b7079; font-style: italic; }
+.report .r-err { padding: 10px 14px; color: #a3261d; background: #fdf1f0; border: 1px solid #f1c9c5; border-radius: 4px; font: 14px/1.5 var(--r-sans); }
+
+/* ---- phone: the page is the screen ---- */
+@media (max-width: 700px) {
+  .report { margin: 0; padding: 24px 16px 48px; box-shadow: none; font-size: 16px; }
+  .report h1 { font-size: 25px; }
+  .report h2 { font-size: 20px; }
+  .report #r-abstract { padding: 14px 16px 4px; }
+  .report .r-grid { gap: 6px; padding: 6px; }
+}
+
+/* ---- print: the paper alone (style.css hides the app around it) ---- */
+@media print {
+  @page { margin: 16mm 15mm; }
+  .r-bar, .r-toc { display: none; }
+  .report { max-width: none; margin: 0; padding: 0; box-shadow: none; font-size: 10.5pt; line-height: 1.45; }
+  .report h1 { font-size: 20pt; }
+  .report h2 { font-size: 14pt; }
+  .report h3 { font-size: 11.5pt; }
+  .report :is(h2, h3) { break-after: avoid; }
+  .report :is(.r-fig, .r-tabwrap, .r-kv, .r-eq, tr) { break-inside: avoid; }
+  .report :is(p, li) { orphans: 3; widows: 3; }
+  .report .r-sec, .report .r-slot { margin-top: 20pt; }
+  .report .r-tabwrap { overflow: visible; }
+  .report .r-fig > img { max-height: 120mm; width: auto; }
+  .report .r-photos .r-grid { max-width: 140mm; margin: 0 auto; }
+  .report :is(.r-tab, .r-tab caption, .r-kv, .r-fig figcaption) { font-size: 9pt; }
+  .report :is(.r-scen, .r-reopen) { font-size: 9.5pt; }
+}
