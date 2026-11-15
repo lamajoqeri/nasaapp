@@ -137,9 +137,7 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .card.sel .card-status, .card-status.err { white-space: normal; }
 .card-status.err { color: var(--bad); }
 
-.card-more { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .14s ease-out, visibility 0s .14s; }
-.card.sel .card-more { grid-template-rows: 1fr; visibility: visible; transition-delay: 0s; }
-.card-ctl { overflow: hidden; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.card-ctl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .card-ctl > :first-child { margin-top: 12px; }
 .f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .f > span, .nudge .lbl { font-size: 10.5px; line-height: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }

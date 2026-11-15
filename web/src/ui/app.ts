@@ -10,7 +10,7 @@ import { mountMap, type MapHandle } from './map';
 import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
 import { compareTable } from './compare';
-import { register, run, schema, setSnapshot, snapshot, actions, tools } from './actions';
+import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools } from './actions';
 import { mountAgent } from '../agent/panel';
 import type { View3DHandle } from '../view3d';
 import { regionAt, type RegionTile } from '../view3d/regions';
@@ -73,8 +73,13 @@ const whenOf = (s: Scenario) => isoMin(s.spec.t).replace('T', ' ');
 
 const env = { slip: () => slip, rangeOf, onUpdate };
 
+/** True while a control's action runs its synchronous part: only then may it move focus (never on agent calls). */
+let byUser = false;
 /** A control fires an action. Failures are the action's own message (bad input); nothing else to show. */
-const ui = (name: string, args?: object) => { run(name, args).catch((e) => console.warn(e)); };
+const ui = (name: string, args?: object) => {
+  byUser = true;
+  try { run(name, args).catch((e) => console.warn(e)); } finally { byUser = false; }
+};
 const idOf = (sc: Scenario) => LETTERS[scs.indexOf(sc)];
 const iso = (t: number) => isoMin(t) + 'Z';
 
@@ -172,7 +177,6 @@ function syncCard(sc: Scenario) {
   $('.badge', el).textContent = L;
   const head = $('.card-head', el);
   head.setAttribute('aria-label', `Scenario ${L}: ${nameOf(sc)}, landing ${whenOf(sc)} UTC${on ? ', selected' : ''}`);
-  $('.card-more', el).toggleAttribute('inert', !on);
   const rm = $<HTMLButtonElement>('.rm', el);
   rm.disabled = scs.length <= 1;
   rm.setAttribute('aria-label', `Remove scenario ${L}`); rm.title = 'Remove scenario';
@@ -287,18 +291,21 @@ function add(spec: Spec, quiet = false): Scenario {
 }
 function remove(sc: Scenario) {
   if (scs.length <= 1) return;
-  const i = scs.indexOf(sc);
+  const i = scs.indexOf(sc), lost = !!cards.get(sc)?.contains(document.activeElement); // e.g. its own ✕
   scs.splice(i, 1);
   cards.get(sc)?.remove(); cards.delete(sc);
   chips.get(sc)?.remove(); chips.delete(sc); pending.delete(sc);
   sel = Math.min(sel > i ? sel - 1 : sel, scs.length - 1);
   cards.get(cur())?.classList.remove('sel'); // force select() to repaint
   select(sel); afterCount();
+  if (lost) (editorOpen ? $('#editor-close') : chips.get(cur()))?.focus({ preventScroll: true });
 }
 /** Scenario count changed: letters, lane badges, dock height. */
 function afterCount() {
   for (const s of scs) { syncCard(s); paintCard(s); }
-  $<HTMLButtonElement>('#add').hidden = scs.length >= MAX;
+  const addBtn = $<HTMLButtonElement>('#add'), full = scs.length >= MAX;
+  if (full && document.activeElement === addBtn) chips.get(scs[scs.length - 1])?.focus({ preventScroll: true });
+  addBtn.hidden = full;
   $<HTMLCanvasElement>('#lanes').style.height = `${lanesHeight(scs.length)}px`;
   $('.playhead').style.height = `${TOP + scs.length * PITCH - 2}px`;
   $('#lane-badges').innerHTML = scs.map((_, i) => `<button type="button" class="badge" data-lane="${i}" aria-label="Select scenario ${LETTERS[i]}">${LETTERS[i]}</button>`).join('');
@@ -307,10 +314,10 @@ function afterCount() {
 }
 
 /** The full card of the selected scenario, as a pop-over under the chips. */
-function setEditor(open: boolean) {
+function setEditor(open: boolean, focus = false) {
   editorOpen = open;
   $('#editor').hidden = !open;
-  if (open) $('#editor-close').focus({ preventScroll: true });
+  if (open && focus) $('#editor-close').focus({ preventScroll: true });
   else if ($('#editor').contains(document.activeElement)) chips.get(cur())?.focus();
 }
 
@@ -541,13 +548,13 @@ function paintCompare() {
   $('#cmp-legend').innerHTML = `<i class="dot"></i> best in the row${slip
     ? ` · second line: change if the landing is delayed by ${slip} d, <span class="good">better</span> or <span class="bad">worse</span>` : ''}`;
 }
-function setCompare(open: boolean) {
+function setCompare(open: boolean, focus = false) {
   cmpOpen = open;
   const sheet = $('#sheet'), btn = $('#cmp');
   sheet.classList.toggle('open', open);
   sheet.toggleAttribute('inert', !open);
   btn.setAttribute('aria-pressed', String(open));
-  if (open) { paintCompare(); $('#cmp-close').focus({ preventScroll: true }); }
+  if (open) { paintCompare(); if (focus) $('#cmp-close').focus({ preventScroll: true }); }
   else if (sheet.contains(document.activeElement)) btn.focus();
   saveHash();
 }
@@ -641,7 +648,7 @@ function scOf(id: string): Scenario {
 function siteOf(q: string): SiteRec {
   const k = q.trim().toLowerCase();
   const s = sites.find((x) => x.id === k) ?? sites.find((x) => x.name.toLowerCase() === k);
-  if (!s) throw new Error(`Unknown site "${q}". Use sites.search to find a catalogue id, or give lat and lon.`);
+  if (!s) throw new Error(`Unknown site "${q}". Use ${toolName('sites.search')} to find a catalogue id, or give lat and lon.`);
   return s;
 }
 function timeOf(s: string): number {
@@ -703,10 +710,11 @@ const oneLine = (sc: Scenario) => {
 };
 
 function viewState() {
+  const mapRegion = keyOf(MAP_REGION, map?.state().mode) ?? 'south_pole';
   return {
     mode,
-    mapRegion: keyOf(MAP_REGION, map?.state().mode) ?? 'south_pole',
-    mapOverlay: keyOf(MAP_OVERLAY, map?.state().overlay) ?? 'terrain',
+    mapRegion,
+    mapOverlay: mapRegion === 'whole_moon' ? 'terrain' : keyOf(MAP_OVERLAY, map?.state().overlay) ?? 'terrain', // no overlays there
     region3d: view3d?.region() ?? null,
     note: $('#stage-note').textContent || null,
   };
@@ -731,7 +739,7 @@ function nowState() {
     hoursAfterLanding: i, timeShown: iso(stageTime()),
     scenarios: scs.map((sc) => {
       const s = sc.base?.series, k = s ? Math.min(i, s.t.length - 1) : 0;
-      return s ? { id: idOf(sc), at: iso(sc.spec.t + i * 3600e3), sunElevationDeg: r1(s.sunEl[k]), sunDiskVisiblePct: Math.round(s.sunFrac[k] * 100), earthInView: !!s.earthVis[k], dsnLink: !!s.earthVis[k] && !!sc.base!.mission.dsn[k] }
+      return s ? { id: idOf(sc), at: iso(sc.spec.t + i * 3600e3), sunElevationDeg: r1(s.sunEl[k]), sunDiskVisiblePct: Math.round(s.sunFrac[k] * 100), earthInView: !!s.earthVis[k], dsnLink: !!s.earthVis[k] && !!sc.base!.mission.dsn[k], computing: sc.busy }
         : { id: idOf(sc), computing: true };
     }),
   };
@@ -764,7 +772,7 @@ function registerActions() {
   const num = (description: string) => ({ type: 'number' as const, description });
   const ID = str('Scenario id: its letter, A to D.');
   const SPEC = {
-    site: str('Catalogue site id (see sites.search), e.g. "malapert". Sets the position.'),
+    site: str(`Catalogue site id (see ${toolName('sites.search')}), e.g. "malapert". Sets the position.`),
     lat: num('Latitude in degrees, -90 to 90. Use with lon for a point that is not in the catalogue.'),
     lon: num('Longitude in degrees east, -180 to 360.'),
     t: str('Landing time, UTC, ISO 8601, e.g. "2027-03-02T00:00Z". Clamped to the dates the app can compute.'),
@@ -842,7 +850,7 @@ function registerActions() {
     run: async ({ id, editor }: { id: string; editor?: boolean }) => {
       const sc = scOf(id);
       select(scs.indexOf(sc));
-      if (editor != null) setEditor(editor);
+      if (editor != null) setEditor(editor, byUser);
       await settled(sc);
       return { summary: `Selected scenario ${oneLine(sc)}`, scenario: describe(sc) };
     },
@@ -905,9 +913,12 @@ function registerActions() {
     description: 'Switch the page: "mission" (stage, inspector, timeline), "compare" (the side-by-side table of all scenarios, over the mission page) or "evidence" (validation against JPL Horizons, NASA maps and LRO photos).',
     schema: schema({ tab: { type: 'string', enum: ['mission', 'compare', 'evidence'], description: 'Tab to show.' } }, ['tab']),
     run: async ({ tab }: { tab: 'mission' | 'compare' | 'evidence' }) => {
-      const v: View = tab === 'evidence' ? 'evidence' : 'mission';
-      if (cmpOpen !== (tab === 'compare')) setCompare(tab === 'compare');
-      if (view !== v) await setView(v);
+      const focus = byUser;
+      if (tab === 'evidence') { if (view !== 'evidence') await setView('evidence'); } // compare stays as it was, for coming back
+      else {
+        if (view !== 'mission') await setView('mission');
+        if (cmpOpen !== (tab === 'compare')) setCompare(tab === 'compare', focus);
+      }
       return { tab: tabNow() };
     },
   });
@@ -1091,7 +1102,7 @@ export async function start(root: HTMLElement) {
     const t = e.target as HTMLElement;
     if (editorOpen && t.closest?.('.rail') && !t.closest('#editor, #chips')) ui('scenario.select', { id: LETTERS[sel], editor: false });
   });
-  for (const b of document.querySelectorAll<HTMLElement>('.views [data-view]')) b.onclick = () => ui('tab.set', { tab: b.dataset.view });
+  for (const b of document.querySelectorAll<HTMLElement>('.views [data-view]')) b.onclick = () => ui('tab.set', { tab: b.dataset.view === 'mission' && cmpOpen ? 'compare' : b.dataset.view }); // Mission keeps compare open
   for (const b of document.querySelectorAll<HTMLElement>('.stage-switch [data-mode]')) b.onclick = () => ui('view.set', { mode: b.dataset.mode });
   $('#cmp').onclick = toggleCompare;
   $('#cmp-close').onclick = toggleCompare;
@@ -1109,7 +1120,7 @@ export async function start(root: HTMLElement) {
   window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'Escape' && editorOpen) return ui('scenario.select', { id: LETTERS[sel], editor: false });
-    if (e.key === 'Escape' && cmpOpen) return toggleCompare();
+    if (e.key === 'Escape' && cmpOpen && view === 'mission') return toggleCompare();
     if ((e.target as HTMLElement).closest?.('input, select, textarea')) return;
     if (e.key === 'c' && view === 'mission') toggleCompare();
   });

@@ -178,7 +178,6 @@ export function mountMap(el: HTMLElement, opts: {
         <button type="button" data-ov="sp_sun" aria-pressed="false">Sunlight</button>
         <button type="button" data-ov="sp_earth" aria-pressed="false">Earth view</button>
       </div>
-      <div class="lmap-legend" hidden><span>0%</span><canvas width="256" height="1"></canvas><span>100% of the time</span><span class="lmap-legend-note">· NASA data covers poleward of ~85°S</span></div>
       <div class="lmap-seg lmap-zoom" role="group" aria-label="Zoom">
         <button type="button" data-zoom="out" aria-label="Zoom out">&minus;</button>
         <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
@@ -188,8 +187,11 @@ export function mountMap(el: HTMLElement, opts: {
       <canvas class="lmap-canvas" role="img" tabindex="0"></canvas>
       <p class="lmap-loading">Loading map…</p>
     </div>
-    <p class="lmap-readout"></p>
-    <p class="lmap-err" role="status"></p>`;
+    <div class="lmap-foot">
+      <div class="lmap-legend" hidden><span>0%</span><canvas width="256" height="1"></canvas><span>100% of the time</span><span class="lmap-legend-note">· data poleward of 85°S</span></div>
+      <p class="lmap-err" role="status"></p>
+      <p class="lmap-readout"></p>
+    </div>`;
   el.append(root);
 
   const q = <T extends HTMLElement>(s: string) => root.querySelector(s) as T;
@@ -242,6 +244,11 @@ export function mountMap(el: HTMLElement, opts: {
       images[id] = img;
       if (id === 'sp_sun' || id === 'sp_earth') {
         try { overlays[id] = buildOverlay(img, luts[id], bounds[id]); } catch { fail(NAMES[id]); }
+      }
+      // Build the blended detail once both images are in, here rather than in the draw path (4M-pixel loop).
+      const d = images.shackleton_hillshade, base = images.sp_hillshade;
+      if ((id === 'shackleton_hillshade' || id === 'sp_hillshade') && d && base && !detail) {
+        try { detail = buildDetail(d, bounds.shackleton_hillshade, base, bounds.sp_hillshade); } catch { detail = d; }
       }
       refreshLoading(); draw();
     };
@@ -387,9 +394,6 @@ export function mountMap(el: HTMLElement, opts: {
       if (detailVisible(view, sb)) {
         load('shackleton_hillshade');
         const d = images.shackleton_hillshade;
-        if (d && base && !detail) {
-          try { detail = buildDetail(d, sb, base, b); } catch { detail = d; }
-        }
         if (detail) drawGeo(detail, d.naturalWidth, d.naturalHeight, sb);
       }
       const ov = overlay !== 'none' ? overlays[overlay] : undefined;
@@ -478,6 +482,7 @@ export function mountMap(el: HTMLElement, opts: {
 
   function pct(id: 'sp_sun' | 'sp_earth', x: number, y: number): number | null {
     const o = overlays[id];
+    if (Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
     const p = o && imgPixel(bounds[id], o.w, o.h, x, y);
     return o && p ? Math.round((o.data[p[1] * o.w + p[0]] / 255) * 100) : null;
   }
