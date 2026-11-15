@@ -488,6 +488,7 @@ function showStage() {
       map = mountMap($('#smap'), {
         dataBase, sites,
         onPick: (lat, lon, id) => { if (cur()) ui('scenario.update', id ? { id: LETTERS[sel], site: id } : { id: LETTERS[sel], lat, lon }); },
+        onBar: (c) => ui('view.set', { region: keyOf(MAP_REGION, c.mode), overlay: keyOf(MAP_OVERLAY, c.overlay) }),
       });
       map.focus(cur().spec.lat, cur().spec.lon);
     }
@@ -701,14 +702,11 @@ const oneLine = (sc: Scenario) => {
   return `${idOf(sc)}: ${nameOf(sc)}, ${iso(sc.spec.t)}` + (h && 'sunlitPct' in h ? ` (sunlit ${h.sunlitPct}%, Earth ${h.earthPct}%, longest dark ${h.longestDarkHours} h)` : '');
 };
 
-// ponytail: MapHandle has no region/overlay setter or getter, so this reads and clicks map.ts's own toolbar buttons.
-// Replace with handle.setView()/setOverlay() once map.ts exposes them.
-const mapBtn = (sel: string) => document.querySelector<HTMLElement>(`#smap ${sel}`);
 function viewState() {
   return {
     mode,
-    mapRegion: keyOf(MAP_REGION, mapBtn('[data-mode][aria-pressed=true]')?.dataset.mode) ?? 'south_pole',
-    mapOverlay: keyOf(MAP_OVERLAY, mapBtn('[data-ov][aria-pressed=true]')?.dataset.ov) ?? 'terrain',
+    mapRegion: keyOf(MAP_REGION, map?.state().mode) ?? 'south_pole',
+    mapOverlay: keyOf(MAP_OVERLAY, map?.state().overlay) ?? 'terrain',
     region3d: view3d?.region() ?? null,
     note: $('#stage-note').textContent || null,
   };
@@ -897,8 +895,8 @@ function registerActions() {
       if (view !== 'mission') await setView('mission');
       const m = a.mode ?? (onMap ? 'map' : mode);
       if (m !== mode) setMode(m);
-      if (region) mapBtn(`[data-mode="${MAP_REGION[region]}"]`)?.click();
-      if (a.overlay) mapBtn(`[data-ov="${MAP_OVERLAY[a.overlay]}"]`)?.click();
+      if (region) map?.setMode(MAP_REGION[region]);
+      if (a.overlay) map?.setOverlay(MAP_OVERLAY[a.overlay]);
       return { tab: tabNow(), view: viewState() };
     },
   });

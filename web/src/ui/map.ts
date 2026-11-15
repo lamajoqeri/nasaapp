@@ -5,7 +5,10 @@ import { spFwd, spInv } from '../core/geom';
 
 export interface MapSite { id: string; name: string; lat: number; lon: number; program: string }
 export interface MapMarker { lat: number; lon: number; label: string }
-export interface MapHandle { setMarkers(m: MapMarker[]): void; focus(lat: number, lon: number): void; destroy(): void }
+export interface MapHandle {
+  setMarkers(m: MapMarker[]): void; focus(lat: number, lon: number): void; destroy(): void;
+  setMode(m: Mode): void; setOverlay(o: OverlayId): void; state(): { mode: Mode; overlay: OverlayId };
+}
 
 // ---------- pure helpers (unit-tested in map.test.ts) ----------
 
@@ -150,7 +153,7 @@ const NAMES: Record<string, string> = {
   sp_sun: 'sunlight overlay', sp_earth: 'Earth-view overlay', global_hillshade: 'whole-Moon map',
 };
 
-type OverlayId = 'none' | 'sp_sun' | 'sp_earth';
+export type OverlayId = 'none' | 'sp_sun' | 'sp_earth';
 interface Overlay { canvas: HTMLCanvasElement; data: Uint8Array; w: number; h: number }
 
 // ---------- component ----------
@@ -159,6 +162,8 @@ export function mountMap(el: HTMLElement, opts: {
   dataBase: string;
   sites: MapSite[];
   onPick(lat: number, lon: number, siteId?: string): void;
+  /** Region/overlay toolbar clicks go here when given (so the app can route them through its actions). */
+  onBar?(c: { mode?: Mode; overlay?: OverlayId }): void;
 }): MapHandle {
   const root = document.createElement('div');
   root.className = 'lmap';
@@ -603,8 +608,8 @@ export function mountMap(el: HTMLElement, opts: {
   root.querySelector('.lmap-bar')!.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b) return;
-    if (b.dataset.mode) setMode(b.dataset.mode as Mode);
-    else if (b.dataset.ov) setOverlay(b.dataset.ov as OverlayId);
+    if (b.dataset.mode) opts.onBar ? opts.onBar({ mode: b.dataset.mode as Mode }) : setMode(b.dataset.mode as Mode);
+    else if (b.dataset.ov) opts.onBar ? opts.onBar({ overlay: b.dataset.ov as OverlayId }) : setOverlay(b.dataset.ov as OverlayId);
     else if (b.dataset.zoom) zoomBy(b.dataset.zoom === 'in' ? 1.5 : 1 / 1.5);
   }, on);
 
@@ -613,6 +618,8 @@ export function mountMap(el: HTMLElement, opts: {
 
   return {
     setMarkers(m) { markers = m.slice(); draw(); },
+    setMode, setOverlay,
+    state: () => ({ mode, overlay }),
     focus(lat, lon) {
       setMode(lat < -80 ? 'polar' : 'global');
       if (view.w) applyFocus(lat, lon); else pendingFocus = [lat, lon];
