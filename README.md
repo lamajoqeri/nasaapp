@@ -17,7 +17,8 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 - **Inspector.** Horizon panorama (terrain silhouette with Sun and Earth tracks); a chart of solar power or Sun elevation above the terrain for every scenario; a windows bar showing when each site is sunlit, has Earth in view, and has Deep Space Network contact; a Power and a Comms verdict with the thresholds stated; and the raw figures (time to sunset and Earthset, sunlit share, longest darkness, battery survival) behind a Details button.
 - **Sky view.** An all-sky chart from the site: the terrain as a band around the edge, the Sun's and Earth's paths over the mission, dashed where terrain hides them, with a "horizon zoom" scale because at the pole everything happens within a few degrees of the horizon.
 - **Compare.** One table, scenarios side by side, best value marked in each row, with the change under each value when a slip is set.
-- **Map.** South-pole and whole-Moon maps with shading layers for NASA's average sunlight and Earth visibility, elevation and slope.
+- **Map.** South-pole and whole-Moon maps with shading layers for NASA's average sunlight and Earth visibility, permanently shadowed regions, elevation and slope.
+- **Science context.** Each scenario reports the distance to the nearest permanently shadowed region, the cold traps where water ice can survive and the reason missions go to the south pole.
 - **Evidence.** A plain-language explanation of why the south pole is hard, a draggable comparison of a real LRO photo against our prediction for the same moment, and every validation number below.
 - Scenarios, slip, view and chart settings are stored in the URL, so a link reproduces the screen.
 
@@ -90,6 +91,7 @@ Read these with their limits:
 - At the pole, results change over tens of meters. Moving a site 100 m can change Earth visibility from 0% to 50% of the time. A coordinate typed to two decimals is not a landing site.
 - Earth visibility uses Earth's centre. NASA's published maps count any part of Earth's disk (0.95 deg radius), so their percentages are higher.
 - The uncertainty bands cover elevation-model error near the site only, were calibrated at one site, and came out about 1.5x narrower than NASA's own terrain realisations imply on held-out data. Treat them as a lower bound. The offset between our 20 m result and the 5 m terrain (0.1-0.4% of yearly illumination here) is larger than the band itself.
+- Permanent-shadow data covers only the area poleward of about 85°S, counts regions of at least 0.1 km², and comes from NASA's 60 m long-term simulation, not from our own horizon engine. Distances are good to about 0.1 km.
 - The ephemeris table covers 2024-2040 (plus 1969-1972 for the Apollo landings).
 - Power is the visible fraction of the solar disk for a Sun-tracking panel. No thermal model, no link budget.
 - The battery model and the Deep Space Network table are simple and have unit tests only; they are not validated against an external source. The DSN table uses a 10 deg elevation mask and a simplified Earth rotation model.
@@ -118,6 +120,7 @@ sh prep/download.sh                 # SPICE kernels, LOLA DEMs, PGDA maps
 .venv/bin/python prep/dem.py        # terrain tiles (reads 20 m windows over HTTP)
 .venv/bin/python prep/dsn.py        # Deep Space Network visibility
 .venv/bin/python prep/maps.py       # base maps
+.venv/bin/python prep/psr.py        # permanently shadowed regions layer and distance field
 .venv/bin/python prep/fixture.py    # synthetic test fixture
 .venv/bin/python prep/checks.py     # 10 s regression checks
 .venv/bin/python prep/validate.py   # Horizons + PGDA validation (3 min)
@@ -133,6 +136,7 @@ sh prep/download.sh                 # SPICE kernels, LOLA DEMs, PGDA maps
 | LOLA 5 m site models and Monte-Carlo realisations (Barker et al. 2021) | Uncertainty calibration | NASA GSFC PGDA, product 78: https://pgda.gsfc.nasa.gov/products/78 |
 | LOLA global elevation model LDEM_16 | Terrain outside the south pole | NASA PDS Geosciences Node: https://pds-geosciences.wustl.edu/missions/lro/lola.htm |
 | Average illumination and Earth visibility maps (Mazarico et al. 2011) | Validation, site suggestions, map overlays | NASA GSFC PGDA, product 69: https://pgda.gsfc.nasa.gov/products/69 |
+| Permanently shadowed regions map (Mazarico et al. 2011) | Permanent-shadow map layer; distance from each site to the nearest shadowed region of at least 0.1 km² | NASA GSFC PGDA, product 69 (LPSR_85S_060M) |
 | LROC NAC DTM orthoimages (SHACKRDGE02, ESALL_CR1, ESALL_SR12) | Shadow comparison | NASA/GSFC/Arizona State University, LROC PDS archive: https://data.lroc.im-ldi.com/ |
 | DE440 ephemeris, lunar orientation and frame kernels | Sun and Earth positions | NASA JPL NAIF: https://naif.jpl.nasa.gov/naif/data.html |
 | JPL Horizons | Validation of Sun and Earth directions | NASA JPL SSD: https://ssd.jpl.nasa.gov/horizons/ |

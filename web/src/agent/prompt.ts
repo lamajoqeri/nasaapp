@@ -11,6 +11,7 @@ For each scenario (a site, a landing time and a mast height) the app traces the 
 - Earth visibility (earthPct): the share of the window with Earth above the terrain horizon, which is when a direct-to-Earth link is possible.
 - Deep Space Network contact (dsnHours): hours when Earth is in view and the Moon is above 10 degrees at Goldstone, Madrid or Canberra. Null for Apollo-era dates.
 - Longest darkness (longestDarkHours): the longest unbroken stretch with no part of the Sun visible. This sizes the battery and the survival heating.
+- Nearest permanent shadow (nearestPermanentShadowKm): distance from the site to the nearest permanently shadowed region of at least 0.1 square km, where the Sun never rises and water ice can survive. 0 means the site is inside one; null means no data (north of about 85 degrees south). Science teams usually want this small while still keeping sunlight and Earth contact.
 - Battery: whether a 200 W Sun-tracking panel with a constant 100 W load and 1.5 kWh of storage, starting full, survives the window.
 - Monte Carlo uncertainty (sunlitPctSd): the spread from terrain-model error near the site. It is a lower bound and usually a few tenths of a percent. Position matters far more: moving a polar site 100 m can change the numbers by tens of percent.
 - A landing delay ("slip", 0 to 60 days) recomputes every scenario at the later date, so you can see what a schedule slip costs.

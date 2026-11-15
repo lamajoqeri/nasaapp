@@ -41,3 +41,5 @@
 /* swatches match the Clear-mode colours of level ground in shaders.ts */
 .v3-legend i.lit { background: #e6d9c0; }
 .v3-legend i.shade { background: #56637b; }
+.v3-legend [hidden] { display: none; }
+.v3-legend .v3-note { color: var(--muted, #8e939c); }

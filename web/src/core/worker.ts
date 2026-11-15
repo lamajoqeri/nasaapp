@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { PsrField } from './psr';
 import { Dem } from './dem';
 import { Ephem } from './ephem';
 import { horizon, type Horizon } from './horizon';
@@ -19,16 +20,17 @@ const text = (b: ArrayBuffer) => JSON.parse(new TextDecoder().decode(b));
 const table = async (name: string) => new Ephem(text(await get(name + '.json')), await get(name + '.bin'));
 
 /** ephs[0] is the main 2024-2040 table; an optional 1969-1972 table follows so Apollo sites can use their real dates. */
-let ready: Promise<{ dem: Dem; ephs: Ephem[]; dsn: Dsn | null }> | null = null;
+let ready: Promise<{ dem: Dem; ephs: Ephem[]; dsn: Dsn | null; psr: PsrField | null }> | null = null;
 const init = () => (ready ??= (async () => {
-  const [dem, eph, apollo, dsnBits] = await Promise.all([
+  const [dem, eph, apollo, dsnBits, psr] = await Promise.all([
     Dem.open((f) => get('dem/' + f)),
     table('ephem'),
     table('ephem_apollo').catch(() => null), // optional
     get('dsn.bin').catch(() => null),        // optional
+    Promise.all([get('psr_dist.json'), get('psr_dist.bin')]).then(([m, b]) => new PsrField(text(m), b)).catch(() => null), // optional
   ]);
   const dsn = dsnBits ? { t0: eph.t0, stepMs: eph.stepMs, bits: new Uint8Array(dsnBits) } : null;
-  return { dem, ephs: apollo ? [eph, apollo] : [eph], dsn };
+  return { dem, ephs: apollo ? [eph, apollo] : [eph], dsn, psr };
 })().catch((e) => { ready = null; throw e; }));
 
 const OUTSIDE = 'that date is outside the ephemeris (2024–2040, plus 1969–1972 for the Apollo landings)';
@@ -83,7 +85,7 @@ const loadPgda = () => (pgda ??= (async () => {
 })());
 
 async function handle(req: Request): Promise<unknown> {
-  const { dem, ephs, dsn } = await init();
+  const { dem, ephs, dsn, psr } = await init();
   switch (req.type) {
     case 'range':
       return { t0: ephs[0].t0, t1: ephs[0].t1, ranges: ephs.map((e) => ({ t0: e.t0, t1: e.t1 })) };
@@ -96,7 +98,7 @@ async function handle(req: Request): Promise<unknown> {
       const m = metrics(s);
       const u = req.mc === false ? null : monteCarlo(s, h, req.earthMargin ?? 0);
       const stepH = s.stepMs / 3600e3;
-      const mission: Mission = { commsHours: commsHours(s, dsn), battery: battery(s.sunFrac, stepH, req.power), dsn: dsnBits(s, dsn) };
+      const mission: Mission = { commsHours: commsHours(s, dsn), battery: battery(s.sunFrac, stepH, req.power), dsn: dsnBits(s, dsn), psrM: psr ? psr.distance(req.site.lat, req.site.lon) : null };
       const res: ScenarioResult = { horizon: h, series: s, metrics: m, uncertainty: u, mission };
       return res;
     }

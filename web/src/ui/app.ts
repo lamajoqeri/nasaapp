@@ -582,7 +582,7 @@ async function setView(v: View) {
 
 const BAD_COORD = 'Latitude must be -90 to 90 and longitude -180 to 360.';
 const MAP_REGION = { south_pole: 'polar', whole_moon: 'global' } as const;
-const MAP_OVERLAY = { terrain: 'none', sunlight: 'sp_sun', earth: 'sp_earth', elevation: 'elevation', slope: 'slope' } as const;
+const MAP_OVERLAY = { terrain: 'none', sunlight: 'sp_sun', earth: 'sp_earth', shadow: 'sp_psr', elevation: 'elevation', slope: 'slope' } as const;
 const keyOf = (o: Record<string, string>, v?: string) => Object.keys(o).find((k) => o[k] === v);
 
 function scOf(id: string): Scenario {
@@ -635,6 +635,8 @@ function headline(sc: Scenario) {
     longestDarkHours: Math.round(pick(sc.rows, 'dark').num!),
     dsnHours: b.mission.commsHours === null ? null : Math.round(b.mission.commsHours),
     battery: pick(sc.rows, 'battery').text,
+    // km to the nearest permanently shadowed region of at least 0.1 km² (0 = the site is inside one); null = no data north of 85°S
+    nearestPermanentShadowKm: b.mission.psrM === null ? null : Math.round(b.mission.psrM / 100) / 10,
     atLanding: { sunElevationDeg: r1(m.sunEl), sunDiskVisiblePct: Math.round(m.sunFrac * 100), earthInView: m.earthVisible },
     // `at` null: it does not happen within the 29.5 days
     nextSunEvent: m.sunFrac > 0 ? { type: 'sunset', at: at(m.hoursToSunset) } : { type: 'sunrise', at: at(m.hoursToSunrise) },
@@ -838,7 +840,7 @@ function registerActions() {
   });
   register({
     name: 'view.set',
-    description: 'Change what the stage shows: the 3D terrain or the 2D map, and on the map its region and colour overlay. Giving region or overlay switches to the map. Overlays shade the south_pole region only (±304 km around the pole): terrain = plain hillshade; sunlight = % of time the Sun is visible (NASA average, poleward of 85°S); earth = % of time Earth is visible (same); elevation = height vs the 1737.4 km reference radius (240 m DEM); slope = surface slope in degrees over a 240 m baseline (≤5° green is landing-friendly, ≥15° red). The 3D view always shows the region of the selected scenario. Opens the mission tab if another tab is showing.',
+    description: 'Change what the stage shows: the 3D terrain or the 2D map, and on the map its region and colour overlay. Giving region or overlay switches to the map. Overlays shade the south_pole region only (±304 km around the pole): terrain = plain hillshade; sunlight = % of time the Sun is visible (NASA average, poleward of 85°S); earth = % of time Earth is visible (same); shadow = permanently shadowed regions, where the Sun never rises and water ice can survive (NASA map, poleward of 85°S); elevation = height vs the 1737.4 km reference radius (240 m DEM); slope = surface slope in degrees over a 240 m baseline (≤5° green is landing-friendly, ≥15° red). The 3D view always shows the region of the selected scenario. Opens the mission tab if another tab is showing.',
     schema: schema({
       mode: { type: 'string', enum: ['3d', 'map'], description: 'Stage view.' },
       region: { type: 'string', enum: Object.keys(MAP_REGION), description: 'Map region.' },

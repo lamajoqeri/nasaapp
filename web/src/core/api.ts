@@ -8,7 +8,11 @@ import type { SearchResult, TerrainPoint } from './terrain';
 export type { Horizon, Metrics, Power, SearchResult, Series, Site, TerrainPoint, Uncertainty };
 
 /** Mission-level results. commsHours is null when the DSN table does not cover the window (Apollo era). */
-export interface Mission { commsHours: number | null; battery: { survivalH: number | null; minSoc: number }; dsn: Uint8Array }
+export interface Mission {
+  commsHours: number | null; battery: { survivalH: number | null; minSoc: number }; dsn: Uint8Array;
+  /** Metres to the nearest permanently shadowed region of at least 0.1 km² (0 inside one); null where there is no data (north of about 85°S). */
+  psrM: number | null;
+}
 export interface Range { t0: number; t1: number }
 
 export type Request =

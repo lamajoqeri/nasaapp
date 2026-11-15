@@ -19,7 +19,7 @@ export const utc = (t: number) => isoMin(t).replace('T', ' ') + ' UTC';
 const pct = (x: number) => `${Math.round(x)}%`;
 const deg = (x: number) => `${x.toFixed(1)}°`;
 
-export type RowKey = 'sunEl' | 'sunDisk' | 'sunEvent' | 'earthEvent' | 'lit' | 'dark' | 'earth' | 'dsn' | 'battery';
+export type RowKey = 'sunEl' | 'sunDisk' | 'sunEvent' | 'earthEvent' | 'lit' | 'dark' | 'earth' | 'dsn' | 'battery' | 'psr';
 
 export interface Row {
   key: RowKey;             // stable id: the event rows change label with the state
@@ -62,6 +62,9 @@ export function rows(m: Metrics, u: Uncertainty | null, mission?: Mission): Row[
   ];
 }
 
+/** Metres -> "640 m" or "3.2 km". */
+export const dist = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`);
+
 function missionRows(x: Mission): Row[] {
   const c = x.commsHours, b = x.battery;
   return [
@@ -73,6 +76,7 @@ function missionRows(x: Mission): Row[] {
       key: 'battery', label: 'Battery', sd: '', num: b.survivalH ?? WIN_H, f: dur, eps: 0.5, good: 1, ok: b.survivalH === null,
       text: b.survivalH === null ? `survives, lowest ${pct(b.minSoc * 100)}` : `empty after ${dur(b.survivalH)}`,
     },
+    { key: 'psr', label: 'Permanent shadow', sd: '', num: x.psrM, f: dist, eps: 1, good: 0, text: x.psrM === null ? 'no data north of 85°S' : x.psrM < 1 ? 'site is inside one' : `${dist(x.psrM)} away` },
   ];
 }
 

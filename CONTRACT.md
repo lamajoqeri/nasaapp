@@ -172,6 +172,10 @@ Base maps for the site picker: `{id, file, proj, kind, bounds}`; `bounds` = `[x_
 (or `bounds_deg` for the equirectangular global map, longitude 0..360 left to right). `sp_hillshade`, `shackleton_hillshade`, `global_hillshade`
 are orientation hillshades (artificial light, not a prediction). `sp_sun` / `sp_earth` are NASA PGDA average visibility, 0..255 = 0..100% of the time.
 
+### `psr_dist.bin` + `psr_dist.json`, `maps/sp_psr.png`
+
+From `prep/psr.py` (NASA PGDA product 69, LPSR_85S_060M). `psr_dist.bin`: `Uint16[w*h]`, row 0 at the top, south polar stereographic; `(x0, y0)` = centre of cell (0,0), `px` = 240 m. Value x `unit_m` (2 m) = metres from the cell centre to the nearest permanently shadowed region of at least `min_area_km2` (0.1); 0 inside one. Bilinear sample; outside the grid (north of about 85°S) there is no data. `maps/sp_psr.png`: same grid as `sp_sun.png`, grey 0..255 = share of the 120 m cell that is permanently shadowed.
+
 ### `fixture/series_check.json`
 
 Three real sites, one lunar day (708 hourly steps) each, from `prep/checks.py`: `sun_frac[708]`, `earth_el_minus_horizon[708]`,

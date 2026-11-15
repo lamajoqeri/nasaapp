@@ -143,12 +143,12 @@ describe('shared formatting', () => {
   });
   it('metricsTable: placeholder rows before results, a delta column with a slip', () => {
     const empty = metricsTable(undefined, 0);
-    expect(empty.match(/<tr>/g)!.length).toBe(10);
+    expect(empty.match(/<tr>/g)!.length).toBe(11);
     expect(empty).toContain('<td>–</td>');
     const r = rows(real.metrics, real.uncertainty, real.mission), c = rows(real.metrics, null, real.mission);
     const plain = metricsTable({ rows: r, cmp: c, srows: undefined, slipError: '' }, 0);
     expect(plain).not.toContain('Delayed');
-    expect(plain.match(/<tr>/g)!.length).toBe(10);
+    expect(plain.match(/<tr>/g)!.length).toBe(11);
     const slipped = metricsTable({ rows: r, cmp: c, srows: c, slipError: '' }, 21);
     expect(slipped).toContain('<th>Delayed 21 d</th>');
     expect(slipped).toContain('class="d same"');           // identical rows: no change

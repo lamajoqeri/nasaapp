@@ -181,7 +181,7 @@ const TABLE_TITLES: Partial<Record<Row['key'], string>> = {
   dsn: 'Hours when Earth is in view from the site and the Moon is above 10° at Goldstone, Madrid or Canberra',
   battery: '200 W Sun-tracking panel, constant 100 W load, 1.5 kWh of storage, starting full',
 };
-const EMPTY_ROWS = ['Sun elevation', 'Sun disk visible', 'Sunset in', 'Earthset in', 'Sunlit, 29.5 d', 'Longest dark', 'Earth in view', 'Deep Space Network', 'Battery'];
+const EMPTY_ROWS = ['Sun elevation', 'Sun disk visible', 'Sunset in', 'Earthset in', 'Sunlit, 29.5 d', 'Longest dark', 'Earth in view', 'Deep Space Network', 'Battery', 'Permanent shadow'];
 
 /** The raw metrics table (today's rendering, unchanged): values at landing, plus the change if the landing is delayed. */
 export function metricsTable(sc: Pick<Scenario, 'rows' | 'cmp' | 'srows' | 'slipError'> | undefined, slip: number): string {

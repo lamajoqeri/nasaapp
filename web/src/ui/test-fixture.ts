@@ -28,6 +28,6 @@ export async function realResult(site = CONNECTING_RIDGE, iso = '2027-06-20T00:0
   const h = horizon(dem, site.lat, site.lon, site.mast);
   const t0 = Date.parse(iso);
   const s = series(eph, site, h, t0, t0 + 29.5 * 86400e3, 3600e3);
-  const mission: Mission = { commsHours: commsHours(s, dsn), battery: battery(s.sunFrac, 1), dsn: Uint8Array.from(s.t, (t) => dsnAt(dsn, t)) };
+  const mission: Mission = { commsHours: commsHours(s, dsn), battery: battery(s.sunFrac, 1), dsn: Uint8Array.from(s.t, (t) => dsnAt(dsn, t)), psrM: null };
   return { horizon: h, series: s, metrics: metrics(s), uncertainty: monteCarlo(s, h), mission };
 }

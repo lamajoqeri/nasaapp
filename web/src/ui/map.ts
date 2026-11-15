@@ -199,20 +199,22 @@ const DEFAULT_BOUNDS: Record<string, Bounds> = {
   shackleton_hillshade: [-30000, -30000, 10000, 10000],
   sp_sun: [-151740, -151740, 151740, 151740],
   sp_earth: [-151740, -151740, 151740, 151740],
+  sp_psr: [-151740, -151740, 151740, 151740],
   elevation: [-304000, -303920, 303920, 304000],
   slope: [-304000, -303920, 303920, 304000],
   global_hillshade: [0, -90, 360, 90],
 };
 const FILES: Record<string, string> = {
   sp_hillshade: 'sp_hillshade.png', shackleton_hillshade: 'shackleton_hillshade.png',
-  sp_sun: 'sp_sun.png', sp_earth: 'sp_earth.png', global_hillshade: 'global_hillshade.jpg',
+  sp_sun: 'sp_sun.png', sp_earth: 'sp_earth.png', sp_psr: 'sp_psr.png', global_hillshade: 'global_hillshade.jpg',
 };
 const NAMES: Record<string, string> = {
   sp_hillshade: 'south pole map', shackleton_hillshade: 'Shackleton detail map',
-  sp_sun: 'sunlight overlay', sp_earth: 'Earth-view overlay', global_hillshade: 'whole-Moon map',
+  sp_sun: 'sunlight overlay', sp_earth: 'Earth-view overlay', sp_psr: 'permanent-shadow overlay', global_hillshade: 'whole-Moon map',
 };
 
-export type LayerId = 'none' | 'sp_sun' | 'sp_earth' | 'elevation' | 'slope';
+export type LayerId = 'none' | 'sp_sun' | 'sp_earth' | 'sp_psr' | 'elevation' | 'slope';
+const isPgda = (id: string) => id === 'sp_sun' || id === 'sp_earth' || id === 'sp_psr'; // NASA PGDA image layers, 85°S disc
 /** @deprecated old name */
 export type OverlayId = LayerId;
 type Layer = Exclude<LayerId, 'none'>;
@@ -230,6 +232,11 @@ const LAYERS: Record<Layer, { label: string; lut: Uint8ClampedArray; ends(lo: nu
   sp_earth: {
     label: 'Earth view %', lut: rampLut(EARTH_RGB), ends: () => ['0%', '100% of time'], note: PGDA_NOTE,
     read: (v) => `Earth visible ${Math.round(v)}% of the time (NASA average)`,
+  },
+  sp_psr: { // where the Sun never rises: the cold traps that can hold water ice
+    label: 'Permanent shadow', lut: stopsLut([[0, [58, 62, 70]], [0.5, [120, 100, 200]], [1, [176, 140, 255]]]),
+    ends: () => ['sunlit at times', 'never sunlit'], note: PGDA_NOTE,
+    read: (v) => (v >= 50 ? 'Permanently shadowed (NASA map): the Sun never rises here' : v > 0 ? `${Math.round(v)}% of this cell is permanently shadowed` : 'Not permanently shadowed'),
   },
   elevation: {
     label: 'Elevation',
@@ -334,8 +341,8 @@ export function mountMap(el: HTMLElement, opts: {
     img.onload = () => {
       if (dead) return;
       images[id] = img;
-      if (id === 'sp_sun' || id === 'sp_earth') {
-        try { overlays[id] = buildOverlay(img, LAYERS[id].lut, bounds[id]); } catch { fail(NAMES[id]); }
+      if (isPgda(id)) {
+        try { overlays[id as Layer] = buildOverlay(img, LAYERS[id as Layer].lut, bounds[id]); } catch { fail(NAMES[id]); }
       }
       // Build the blended detail once both images are in, here rather than in the draw path (4M-pixel loop).
       const d = images.shackleton_hillshade, base = images.sp_hillshade;
@@ -402,7 +409,7 @@ export function mountMap(el: HTMLElement, opts: {
     .finally(() => {
       if (dead) return;
       indexReady = true;
-      load('sp_hillshade'); load('sp_sun'); load('sp_earth');
+      load('sp_hillshade'); load('sp_sun'); load('sp_earth'); load('sp_psr');
       if (mode === 'global') load('global_hillshade');
       layout();
     });
@@ -472,6 +479,7 @@ export function mountMap(el: HTMLElement, opts: {
     }
     const about: Record<LayerId, string> = {
       none: '', sp_sun: ', coloured by how often the Sun is visible', sp_earth: ', coloured by how often Earth is visible',
+      sp_psr: ', with permanently shadowed regions highlighted',
       elevation: ', coloured by elevation', slope: ', coloured by slope',
     };
     canvas.setAttribute('aria-label', (mode === 'polar'
@@ -620,7 +628,7 @@ export function mountMap(el: HTMLElement, opts: {
   /** Layer value at map point (x, y), null outside its coverage or before it's built. */
   function pct(id: Layer, x: number, y: number): number | null {
     const o = overlays[id];
-    if ((id === 'sp_sun' || id === 'sp_earth') && Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
+    if (isPgda(id) && Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
     const p = o && imgPixel(bounds[id], o.w, o.h, x, y);
     return o && p ? o.at(p[1] * o.w + p[0]) : null;
   }
@@ -639,6 +647,7 @@ export function mountMap(el: HTMLElement, opts: {
         const sun = pct('sp_sun', ox, oy), earth = pct('sp_earth', ox, oy);
         const parts = [sun != null && `Sun visible ${Math.round(sun)}%`, earth != null && `Earth visible ${Math.round(earth)}%`].filter(Boolean);
         if (parts.length) s += ` · ${parts.join(' · ')} of the time (NASA average)`;
+        if ((pct('sp_psr', ox, oy) ?? 0) >= 50) s += ' · permanently shadowed';
       }
     }
     readoutEl.textContent = s;

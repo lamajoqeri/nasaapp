@@ -6,7 +6,7 @@ import { Dem, type Tile } from '../core/dem';
 import { Ephem } from '../core/ephem';
 import { azel, DEG, enu, R, spFwd, spInv, unit, type V3 } from '../core/geom';
 import { demMax, EARTH_RADIUS_DEG, SUN_RADIUS_DEG, sunFractionAt } from './march';
-import { BLOCK_HI, BLOCK_LO, BLOCK_MID, DEPTH_FRAG, GBUF_FRAG, PROBE_FRAG, RESOLVE_FRAG, SCREEN_VERT, TERRAIN_FRAG, TERRAIN_VERT } from './shaders';
+import { BLOCK_HI, BLOCK_LO, BLOCK_MID, DEPTH_FRAG, GBUF_FRAG, PROBE_FRAG, RESOLVE_FRAG, SCREEN_VERT, TERRAIN_FRAG, TERRAIN_VERT, DETAIL, LITMAP_FRAG, EARTH_FRAG, GLARE_FRAG, SKY_VERT } from './shaders';
 import { regionTiles } from './regions';
 import { run } from '../ui/actions';
 import { bindView3D, wantedRenderMode, type CameraState, type RenderMode } from './actions';
@@ -62,6 +62,14 @@ export interface View3DDebugHandle extends View3DHandle {
     events(): string[];
     /** Override the base pixel ratio (undefined = device, capped). For measuring DPR 1.5 on a DPR 1 screen. */
     setPixelRatio(pr?: number): void;
+    /** Overview camera for repeatable screenshots: orbit target (lat, lon), distance (m), bearing of the camera from the target and its elevation (deg). */
+    pose(lat: number, lon: number, dist: number, az: number, el: number): void;
+    /** Site view direction (deg) and horizontal field of view; turns Follow Sun off. */
+    look(az: number, pitch: number, hfov: number): void;
+    /** Displayed RGB (0..255) of the canvas at a CSS pixel, from a fresh frame. */
+    pixel(x: number, y: number): number[];
+    /** Set a float shading uniform (uDetail, uScatter, uExposure, uAmbient) for tuning and timing. */
+    tune(name: string, value: number): void;
   };
 }
 
@@ -71,6 +79,9 @@ const MAX_PIXEL_RATIO = 1.5;
 const DEFAULT_REGION = 'shackleton_20m', LO_ID = 'sp_240m';
 const IDLE_MAX_PX = 6.5e6;    // idle frames are supersampled up to 2x per axis, within this many buffer pixels
 const PICK_INSET_M = 1000;    // clicks count this far inside the region tile (the host's own margin)
+const GLARE_RADIUS_DEG = 6;
+const MIN_ORBIT_M = 150;       // closest orbit distance: the illustrative detail still holds up there
+const MIN_ALT_M = 40;         // the overview camera stays at least this far above the terrain
 const FOLLOW_PITCH = 3;       // deg above level when the site camera follows the Sun
 const HI_STEP = 2;            // mesh decimation of the 20 m tile (shadows always use full resolution)
 const PIN_M = 700;
@@ -151,7 +162,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       <button type="button" data-render="realistic" aria-pressed="true" title="Lit only by the Sun; shadows are black">Realistic</button>
       <button type="button" data-render="clear" aria-pressed="false" title="Relief-map colours: sunlit warm, shadow cool, same shadows">Clear</button>
     </div>
-    <div class="v3-legend" hidden><span><i class="lit"></i>sunlit</span><span><i class="shade"></i>in shadow</span></div>
+    <div class="v3-legend" hidden><span class="v3-key"><i class="lit"></i>sunlit</span><span class="v3-key"><i class="shade"></i>in shadow</span><span class="v3-note" title="Craters and regolith grain below the resolution of the elevation data (20 m in the region, 240 m around it) are procedural. Shadows and every number come from the data only.">Surface texture finer than 20 m is illustrative.</span></div>
     <canvas class="v3-az" hidden aria-hidden="true"></canvas>
     <div class="v3-readout" hidden></div>
     <div class="v3-dir sun" hidden><i></i><span>Sun</span></div>
@@ -201,7 +212,8 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     ui.querySelectorAll<HTMLElement>('.v3-site-only').forEach((e) => { e.hidden = eff !== 'site'; });
     followBtn.setAttribute('aria-pressed', String(follow));
     ui.querySelectorAll<HTMLElement>('button[data-render]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.render === renderMode)));
-    q('.v3-legend').hidden = renderMode !== 'clear' || !ready;
+    q('.v3-legend').hidden = !ready;
+    root.querySelectorAll<HTMLElement>('.v3-key').forEach((e) => { e.hidden = renderMode !== 'clear'; });
   };
   ui.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('button');
@@ -307,6 +319,10 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       camera: () => live?.debug.camera() ?? { mode: 'none', pos: [], dist: NaN, finite: false },
       events: () => live?.debug.events() ?? [],
       setPixelRatio: (pr) => live?.debug.setPixelRatio(pr),
+      pose: (...a) => live?.debug.pose(...a),
+      look: (az, pitch, hfov) => { follow = false; syncUi(); live?.debug.look(az, pitch, hfov); },
+      pixel: (x, y) => live?.debug.pixel(x, y) ?? [],
+      tune: (n, v) => live?.debug.tune(n, v),
     },
   };
 
@@ -389,9 +405,10 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     };
     const camS = new THREE.Vector3();
     const shadeUniforms = {
-      ...shared, uCam: { value: camS }, uExposure: { value: 1.7 }, uAmbient: { value: 0.015 },
+      ...shared, uCam: { value: camS }, uExposure: { value: 1.25 }, uAmbient: { value: 0.004 },
       uEarth: { value: earthDir }, uEarthshine: { value: 0 }, uPix: { value: 1e-3 },
       uClear: { value: renderMode === 'clear' ? 1 : 0 }, uHill: { value: new THREE.Vector3(0, 0, -1) },
+      uDetail: { value: DETAIL }, uLit: { value: null as THREE.Texture | null }, uScatter: { value: 0.5 },
     };
     // Deferred when float render targets exist (practically always): meshes write (x, y, depth), one
     // full-screen pass marches once per pixel. Otherwise forward, with a depth pre-pass against overdraw.
@@ -424,16 +441,58 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       addMesh(scene, hiMeshes, terrainMat(TERRAIN_FRAG, { depthWrite: false }), 1); addMesh(scene, loMeshes, offset(terrainMat(TERRAIN_FRAG, { depthWrite: false })), 1);
     }
 
+    // ---- scattered light: low-resolution sunlit irradiance of the region, redrawn when the Sun moves ----
+    const LIT_N = 128;
+    const litRT = new THREE.WebGLRenderTarget(LIT_N, LIT_N, { depthBuffer: false, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+    const litMat = new THREE.ShaderMaterial({ uniforms: { ...shared, uLitSize: { value: LIT_N } }, vertexShader: SCREEN_VERT, fragmentShader: LITMAP_FRAG, depthTest: false, depthWrite: false });
+    const litMesh = new THREE.Mesh(screenGeo, litMat);
+    litMesh.frustumCulled = false;
+    const litScene = new THREE.Scene().add(litMesh), litCam = new THREE.Camera();
+    shadeUniforms.uLit.value = litRT.texture;
+    let litDirty = true;
+    const litSun = new THREE.Vector3(), LIT_REDRAW_COS = Math.cos(2 * DEG);
+    const drawLitMap = () => {
+      litDirty = false;
+      litSun.copy(sunDir);
+      renderer.setRenderTarget(litRT);
+      renderer.render(litScene, litCam);
+      renderer.setRenderTarget(null);
+    };
+
     // ---- Sun and Earth disks (site view). Drawn first without depth; terrain then covers them. ---
-    const diskGeo = new THREE.CircleGeometry(1, 48);
-    const disk = (hex: number, radiusDeg: number) => {
-      const m = new THREE.Mesh(diskGeo, new THREE.MeshBasicMaterial({ color: hex, depthTest: false, depthWrite: false, toneMapped: false }));
+    const diskGeo = new THREE.CircleGeometry(1, 64);
+    const sky = <M extends THREE.Material>(geo: THREE.BufferGeometry, mat: M, radiusDeg: number, order: number) => {
+      const m = new THREE.Mesh(geo, mat);
       m.scale.setScalar(SKY_M * Math.tan(radiusDeg * DEG));
-      m.renderOrder = -1; m.frustumCulled = false; m.visible = false;
+      m.renderOrder = order; m.frustumCulled = false; m.visible = false;
       scene.add(m);
       return m;
     };
-    const sunDisk = disk(SUN_HEX, SUN_RADIUS_DEG), earthDisk = disk(EARTH_HEX, EARTH_RADIUS_DEG);
+    const sunDisk = sky(diskGeo, new THREE.MeshBasicMaterial({ color: SUN_HEX, depthTest: false, depthWrite: false, toneMapped: false }), SUN_RADIUS_DEG, -1);
+    // Restrained glare: a tight radial falloff around the disk, scaled by how much of the Sun the eye sees.
+    const glareMat = new THREE.ShaderMaterial({ uniforms: { uGlare: { value: 0 } }, vertexShader: SKY_VERT, fragmentShader: GLARE_FRAG, depthTest: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending });
+    const sunGlare = sky(diskGeo, glareMat, GLARE_RADIUS_DEG, -2);
+    // Earth: a small shaded globe with the phase the Sun direction gives it.
+    const earthMat = new THREE.ShaderMaterial({ uniforms: { uL: { value: new THREE.Vector3(0, 0, 1) } }, vertexShader: SKY_VERT, fragmentShader: EARTH_FRAG, depthTest: false, depthWrite: false });
+    const earthDisk = sky(diskGeo, earthMat, EARTH_RADIUS_DEG, -1);
+    // Sparse faint stars (site view, Realistic, Sun out of sight): fixed random directions, illustrative.
+    const starGeo = new THREE.BufferGeometry();
+    {
+      const N = 600, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+      let seed = 20270620;
+      const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+      for (let i = 0; i < N; i++) {
+        const z = 2 * rnd() - 1, a = 2 * Math.PI * rnd(), r = Math.sqrt(1 - z * z), b = 0.07 + 0.40 * rnd() ** 4;
+        pos.set([r * Math.cos(a) * SKY_M, r * Math.sin(a) * SKY_M, z * SKY_M], i * 3);
+        col.set([b, b, b * (0.9 + 0.2 * rnd())], i * 3);
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      starGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    }
+    const starMat = new THREE.PointsMaterial({ size: 1.5, sizeAttenuation: false, vertexColors: true, depthTest: false, depthWrite: false, toneMapped: false });
+    const stars = new THREE.Points(starGeo, starMat);
+    stars.frustumCulled = false; stars.renderOrder = -3; stars.visible = false;
+    scene.add(stars);
     const camera = new THREE.PerspectiveCamera(35, 1, 10, FAR_M);
 
     // ---- region: everything that depends on which 20 m tile is shown ------------------------------
@@ -515,17 +574,61 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       camera.up.copy(up);
       camera.position.set(0, 0, 0).addScaledVector(flat, 38e3 * k).addScaledVector(up, 24e3 * k);
     }
+    /** The overview camera never goes below (or closer than MIN_ALT_M to) the terrain. Moves only the camera: no controls.update(), so no recursion. */
+    function keepAbove() {
+      const r = reg;
+      if (!r) return;
+      const p = camera.position, qx = p.x + r.centre[0], qy = p.y + r.centre[1], qz = p.z + r.centre[2], len = Math.hypot(qx, qy, qz);
+      const alt = len - R - r.dem.sampleUnit(qx / len, qy / len, qz / len);
+      if (alt < MIN_ALT_M) p.set(p.x + qx / len * (MIN_ALT_M - alt), p.y + qy / len * (MIN_ALT_M - alt), p.z + qz / len * (MIN_ALT_M - alt));
+    }
+    /** After a zoom-to-cursor or pan the orbit target can float off the ground: put it back on the terrain at the screen centre (same view, new pivot). */
+    function snapTarget() {
+      if (!reg || !controls || inSite) return;
+      const b = cv.getBoundingClientRect(), hit = terrainAt(b.left + b.width / 2, b.top + b.height / 2, 0);
+      if (!hit) return;
+      const [lat, lon] = spInv(hit[0], hit[1]);
+      const t = reg.pos(hit[0], hit[1], reg.dem.sample(lat, lon)), d = t.distanceTo(camera.position);
+      if (d < MIN_ORBIT_M || d > controls.maxDistance) return;
+      controls.target.copy(t);
+    }
+    /** Short eased move of the orbit pivot (and the camera with it) to a terrain point. */
+    let easeRaf = 0;
+    function retarget(x: number, y: number) {
+      if (!reg || !controls || inSite) return;
+      const [lat, lon] = spInv(x, y), c = controls;
+      const to = reg.pos(x, y, reg.dem.sample(lat, lon)), from = c.target.clone(), cam0 = camera.position.clone(), t0 = performance.now();
+      cancelAnimationFrame(easeRaf);
+      const step = () => {
+        if (dead || c !== controls || inSite || !visible) return;
+        const u = Math.min(1, (performance.now() - t0) / 380), k = 1 - (1 - u) ** 3;
+        tmp2.copy(to).sub(from).multiplyScalar(k);
+        c.target.copy(from).add(tmp2);
+        camera.position.copy(cam0).add(tmp2);
+        c.update();
+        if (u < 1) easeRaf = requestAnimationFrame(step);
+      };
+      easeRaf = requestAnimationFrame(step);
+    }
+
     function makeControls(r: Region) {
+      cancelAnimationFrame(easeRaf);
       controls?.dispose();
       defaultPose(r);
       const c = controls = new OrbitControls(camera, cv); // reads camera.up now: one per region
       c.target.set(0, 0, 0); // the region centre is the scene origin
-      c.minDistance = 400; c.maxDistance = 350e3;
+      c.minDistance = MIN_ORBIT_M; c.maxDistance = 350e3;
       c.maxPolarAngle = 89 * DEG;
       c.zoomSpeed = 1.2;
+      c.zoomToCursor = true;
       c.update();
       saved.pos.copy(camera.position); saved.quat.copy(camera.quaternion);
-      c.addEventListener('change', () => { if (!inSite) { saved.pos.copy(camera.position); saved.quat.copy(camera.quaternion); } requestRender(); });
+      c.addEventListener('change', () => {
+        if (!inSite) { keepAbove(); saved.pos.copy(camera.position); saved.quat.copy(camera.quaternion); }
+        requestRender();
+      });
+      c.addEventListener('start', () => cancelAnimationFrame(easeRaf));
+      c.addEventListener('end', snapTarget);
       c.enabled = visible;
     }
 
@@ -539,6 +642,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       sitesChanged();
       timeChanged();
       idleNext = true; // the first frame of a region is already the refined one
+      litDirty = true;
     }
 
     interface SiteGeo { s: View3DSite; h: number; eyeH: number; base: THREE.Vector3; up: THREE.Vector3; e: THREE.Vector3; n: THREE.Vector3; pin: THREE.Line; label: HTMLElement }
@@ -564,6 +668,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       return Math.max(b, Math.min(2 * b, Math.sqrt(IDLE_MAX_PX / Math.max(1, w * h))));
     };
     const renderOnce = () => {
+      if (litDirty) drawLitMap();
       if (deferred) {
         renderer.getDrawingBufferSize(bufSize);
         if (gTarget.width !== bufSize.x || gTarget.height !== bufSize.y) gTarget.setSize(bufSize.x, bufSize.y);
@@ -585,7 +690,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       raf = 0;
       clearTimeout(refineTimer);
       if (!reg || !visible) return; // hidden (zero-sized) stage: resize() renders when it is shown again
-      if (idleNext) { idleNext = false; afterIdle = true; draw(idlePR()); return; }
+      if (idleNext) { idleNext = false; afterIdle = true; if (sunDir.dot(litSun) < 0.9999999) litDirty = true; draw(idlePR()); return; } // idle frames use an exact map
       const t0 = performance.now();
       draw(basePR() * scale);
       sync();
@@ -595,8 +700,8 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       if (afterIdle) afterIdle = false;
       else {
         times.push(ms); if (times.length > 240) times.shift();
-        if (ms > 30) scale = Math.max(0.4, scale * 0.85);
-        else if (ms < 15) scale = Math.min(1, scale * 1.1);
+        if (ms > 21) scale = Math.max(0.4, scale * 0.88);  // hold interactive frames near 60 fps
+        else if (ms < 12) scale = Math.min(1, scale * 1.08);
       }
       refineTimer = window.setTimeout(() => { idleNext = true; requestRender(); }, 160);
     }
@@ -631,6 +736,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       const e = azel(at.lat, at.lon, sg ? sg.h + sg.eyeH : r.h0, v6[3], v6[4], v6[5]);
       shadeUniforms.uEarthshine.value = (sg ? 0.022 : 0.008) * Math.min(1, Math.max(0, e.el / 1.5));
 
+      let sunInView = false;
       for (const [d, body, lab, rad] of [[sunDisk, sunS, bodySun, SUN_RADIUS_DEG], [earthDisk, earthS, bodyEarth, EARTH_RADIUS_DEG]] as const) {
         d.visible = !!sg;
         lab.hidden = true;
@@ -640,10 +746,26 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
         d.lookAt(camera.position);
         tmp.copy(d.position).project(camera);
         if (tmp.z < 1 && Math.abs(tmp.x) < 1.05 && Math.abs(tmp.y) < 1.05) {
+          if (d === sunDisk) sunInView = true;
           lab.hidden = false;
           const rpx = rad / look.hfov * w;
           lab.style.transform = `translate(${((tmp.x + 1) / 2 * w + rpx + 6).toFixed(1)}px, ${((1 - tmp.y) / 2 * h).toFixed(1)}px) translate(0, -50%)`;
         }
+      }
+      sunGlare.visible = stars.visible = false;
+      if (sg) {
+        const eyeSun = sunFractionAt(r.dem, v6, sg.s.lat, sg.s.lon, sg.eyeH); // what the eye sees of the disk
+        sunGlare.visible = eyeSun > 0;
+        sunGlare.position.copy(sunDisk.position); sunGlare.quaternion.copy(sunDisk.quaternion);
+        glareMat.uniforms.uGlare.value = eyeSun;
+        // Earth's phase: the Sun direction in the disk's own frame (x right, y up, z towards the eye).
+        earthDisk.updateMatrixWorld();
+        const el = earthDisk.matrixWorld.elements, L = tmp.copy(sunS).sub(earthS).normalize();
+        earthMat.uniforms.uL.value.set(
+          (L.x * el[0] + L.y * el[1] + L.z * el[2]) / earthDisk.scale.x, (L.x * el[4] + L.y * el[5] + L.z * el[6]) / earthDisk.scale.x, (L.x * el[8] + L.y * el[9] + L.z * el[10]) / earthDisk.scale.x);
+        stars.visible = renderMode === 'realistic' && (eyeSun === 0 || !sunInView);
+        stars.position.copy(camera.position);
+        starMat.size = 1.15 * curPR;
       }
 
       siteGeo.forEach((g, i) => {
@@ -738,6 +860,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       sunS.set(v6[0] * 1000 - c[0], v6[1] * 1000 - c[1], v6[2] * 1000 - c[2]);
       earthS.set(v6[3] * 1000 - c[0], v6[4] * 1000 - c[1], v6[5] * 1000 - c[2]);
       sunDir.set(v6[0], v6[1], v6[2]).normalize(); // one Moon-fixed direction for the whole scene
+      if (sunDir.dot(litSun) < LIT_REDRAW_COS) litDirty = true; // the scattered-light map only needs the Sun roughly right
       earthDir.set(v6[3], v6[4], v6[5]).normalize();
       aim();
       updateReadout();
@@ -804,7 +927,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     let pinch = 0, downAt: { x: number; y: number; id: number } | undefined, hoverAt: { x: number; y: number } | undefined, hoverRaf = 0;
     const gPix = new Float32Array(4);
     /** Stereographic (x, y) of the terrain under a client point, from the last frame's G-buffer. */
-    function terrainAt(clientX: number, clientY: number): [number, number] | undefined {
+    function terrainAt(clientX: number, clientY: number, inset = PICK_INSET_M): [number, number] | undefined {
       if (!deferred || !reg || gTarget.width < 2) return undefined;
       const b = cv.getBoundingClientRect();
       const px = Math.floor((clientX - b.left) / b.width * gTarget.width), py = gTarget.height - 1 - Math.floor((clientY - b.top) / b.height * gTarget.height);
@@ -812,7 +935,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       renderer.readRenderTargetPixels(gTarget, px, py, 1, 1, gPix);
       if (!(gPix[3] > 0.5)) return undefined; // sky
       const x = gPix[0] + reg.xy0[0], y = gPix[1] + reg.xy0[1]; // the G-buffer holds relative map coords
-      return reg.inHi(x, y, PICK_INSET_M) ? [x, y] : undefined; // the coarse surround is not pickable
+      return reg.inHi(x, y, inset) ? [x, y] : undefined; // the coarse surround is not pickable
     }
     const onDown = (e: PointerEvent) => {
       logEv(e);
@@ -861,6 +984,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       setTimeout(() => ring.remove(), 900);
       const [lat, lon] = spInv(hit[0], hit[1]);
       opts.onPick(lat, lon);
+      retarget(hit[0], hit[1]); // the picked point becomes the orbit pivot
     };
     const onWheel = (e: WheelEvent) => {
       logEv(e);
@@ -936,6 +1060,24 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       },
       events: () => evLog.slice(),
       setPixelRatio(pr) { prOverride = pr; scale = 1; idleNext = true; requestRender(); },
+      pose(lat, lon, dist, az, el) {
+        if (!reg || !controls) return;
+        const [x, y] = spFwd(lat, lon), f = enu(lat, lon), t = reg.pos(x, y, reg.dem.sample(lat, lon));
+        const a = az * DEG, e = el * DEG;
+        controls.target.copy(t);
+        camera.position.copy(t).addScaledVector(v3(f.n), dist * Math.cos(e) * Math.cos(a)).addScaledVector(v3(f.e), dist * Math.cos(e) * Math.sin(a)).addScaledVector(v3(f.u), dist * Math.sin(e));
+        controls.update();
+        idleNext = true; requestRender();
+      },
+      tune(name, value) { const u = (shadeUniforms as unknown as Record<string, { value: unknown }>)[name]; if (u && typeof u.value === 'number') { u.value = value; requestRender(); } },
+      look(az, pitch, hfov) { look.az = az; look.pitch = pitch; look.hfov = hfov; idleNext = true; requestRender(); },
+      pixel(x, y) {
+        if (!reg || !visible) return [];
+        draw(curPR || basePR());
+        const b = new Uint8Array(4), k = cv.width / root.clientWidth;
+        gl.readPixels(Math.round(x * k), cv.height - 1 - Math.round(y * k), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, b);
+        return [b[0], b[1], b[2]];
+      },
       gpu() {
         const ext = gl.getExtension('WEBGL_debug_renderer_info');
         return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
@@ -943,7 +1085,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     };
 
     cleanup.push(() => {
-      cancelAnimationFrame(raf); cancelAnimationFrame(hoverRaf); clearTimeout(refineTimer);
+      cancelAnimationFrame(raf); cancelAnimationFrame(hoverRaf); cancelAnimationFrame(easeRaf); clearTimeout(refineTimer);
       ro.disconnect();
       cv.removeEventListener('pointerdown', onDown, true); cv.removeEventListener('pointermove', onMove);
       cv.removeEventListener('pointerup', onUp); cv.removeEventListener('pointercancel', onUp); cv.removeEventListener('pointerleave', onLeave);
@@ -951,7 +1093,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       controls?.dispose();
       reg?.dispose();
       for (const g of siteGeo) g?.pin.geometry.dispose();
-      for (const d of [emptyGeo, diskGeo, screenGeo, texLo, gTarget, ...mats, pinMat, probeMat, probeRT, sunDisk.material, earthDisk.material]) d.dispose();
+      for (const d of [emptyGeo, diskGeo, screenGeo, texLo, gTarget, litRT, litMat, glareMat, starGeo, starMat, ...mats, pinMat, probeMat, probeRT, sunDisk.material, earthDisk.material]) d.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       lo.data = undefined;

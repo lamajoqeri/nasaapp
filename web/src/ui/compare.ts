@@ -35,8 +35,9 @@ const LABELS: Record<RowKey, [string, string]> = {
   earth: ['Earth in view', 'direct link possible'],
   dsn: ['Deep Space Network', 'a ground station can hear the site'],
   battery: ['Battery', '200 W panel, 100 W load, 1.5 kWh'],
+  psr: ['Nearest permanent shadow', 'where water ice can survive'],
 };
-const ORDER: RowKey[] = ['lit', 'dark', 'earth', 'dsn', 'battery', 'sunEvent', 'earthEvent', 'sunEl', 'sunDisk'];
+const ORDER: RowKey[] = ['lit', 'dark', 'earth', 'dsn', 'battery', 'psr', 'sunEvent', 'earthEvent', 'sunEl', 'sunDisk'];
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
 const find = (rs: Row[] | undefined, k: RowKey) => rs?.find((r) => r.key === k);
 

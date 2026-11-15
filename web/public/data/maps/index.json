@@ -52,6 +52,20 @@
   ]
  },
  {
+  "id": "sp_psr",
+  "file": "sp_psr.png",
+  "proj": "spstere",
+  "kind": "permanent_shadow",
+  "scale": "0..255 = 0..100% of the cell permanently shadowed",
+  "source": "NASA PGDA product 69, Mazarico et al. 2011",
+  "bounds": [
+   -151740.0,
+   -151740.0,
+   151740.0,
+   151740.0
+  ]
+ },
+ {
   "id": "global_hillshade",
   "file": "global_hillshade.jpg",
   "proj": "eqc",
