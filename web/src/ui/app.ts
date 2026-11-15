@@ -1,7 +1,7 @@
 // Shell: top bar, scenario rail, stage (3D / map), inspector, timeline dock, compare sheet, evidence page.
 import { core, type Range } from '../core/api';
 import { DSN_NAMES } from '../core/extra';
-import { DEG, enu, R, spFwd } from '../core/geom';
+import { DEG, enu, R } from '../core/geom';
 import { drawPanorama } from './panorama';
 import { drawStrip, stripSummary, stripTimeAt } from './strips';
 import { caption, coord, DAY, delta, dur, isoMin, pctDelta, pick, shortCaption, utc, type Row } from './format';
@@ -10,6 +10,7 @@ import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
 import { compareTable } from './compare';
 import type { View3DHandle } from '../view3d';
+import { regionAt, type RegionTile } from '../view3d/regions';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
 type View = 'mission' | 'evidence';
@@ -23,7 +24,6 @@ const MAX = 4;
 const LETTERS = 'ABCD';
 const DEFAULT_T = Date.parse('2027-06-20T00:00:00Z');
 const DEFAULT_SITES = ['connecting_ridge', 'shackleton_rim'];
-const TILE = [-29000, -29000, 9000, 9000]; // 3D view covers the Shackleton tile (1 km inside its edge), spstere metres
 const dataBase = new URL(import.meta.env.BASE_URL + 'data/', location.href).href;
 
 const ICON = {
@@ -41,6 +41,8 @@ let sel = 0, slip = 0, hours = 0, playing = false, step = 100;
 let view: View = 'mission', mode: Mode = '3d', autoMap = false, forced3d = false, cmpOpen = false;
 let map: MapHandle | undefined, view3d: View3DHandle | undefined, loading3d = false, err3d = '', evidenceMounted = false;
 let plotW = 0, lastPano = -1, lanesQueued = false;
+let regionLoads = 0;
+let demTiles: RegionTile[] | undefined; // DEM manifest: the 3D view can show its 20 m south-polar tiles
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document) => root.querySelector(s) as T;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -56,11 +58,10 @@ function clampT(t: number): number {
   return best;
 }
 const rangeOf = (t: number) => ranges.find((r) => t >= r.t0 && t <= r.t1) ?? ranges[0];
-const inTile = (lat: number, lon: number) => {
-  if (lat > -85) return false;
-  const [x, y] = spFwd(lat, lon);
-  return x > TILE[0] && x < TILE[2] && y > TILE[1] && y < TILE[3];
-};
+/** 3D region (20 m DEM tile id) containing a point, 1 km inside the tile edge. */
+const regionOf = (lat: number, lon: number) => (demTiles ? regionAt(demTiles, lat, lon) : undefined);
+/** Can the 3D view show this point? Unknown (so: yes) until the DEM manifest has loaded. */
+const inTile = (lat: number, lon: number) => !demTiles || !!regionOf(lat, lon);
 const recOf = (s: Scenario) => sites.find((x) => x.id === s.spec.site);
 const nameOf = (s: Scenario) => recOf(s)?.name ?? coord(s.spec.lat, s.spec.lon);
 const whenOf = (s: Scenario) => isoMin(s.spec.t).replace('T', ' ');
@@ -411,7 +412,7 @@ function setPlaying(p: boolean) {
 
 /* ------------------------------------------------------------------ stage */
 
-/** The 3D view only covers the Shackleton tile: fall back to the map for sites outside it, and come back. */
+/** The 3D view covers the five 20 m south-polar regions: fall back to the map for sites outside them, and come back. */
 function stagePolicy() {
   const sc = cur(), inside = inTile(sc.spec.lat, sc.spec.lon);
   if (inside) forced3d = false;
@@ -426,10 +427,10 @@ function paintNote() {
   const inside = inTile(sc.spec.lat, sc.spec.lon);
   let text = '';
   if (mode === 'map') text = autoMap && !inside
-    ? '3D terrain covers the Shackleton and Connecting Ridge region. Showing the map for this site.'
+    ? '3D terrain covers Shackleton, de Gerlache Rim, Haworth, Malapert Massif and Mons Mouton / Nobile Rim. Showing the map for this site.'
     : `Click the map to place scenario ${LETTERS[sel]}.`;
   else if (err3d) text = err3d;
-  else if (!inside) text = `Scenario ${LETTERS[sel]} is outside the 3D region, so it has no pin here. The lighting is for its date.`;
+  else if (!inside) text = `Scenario ${LETTERS[sel]} is outside the 3D regions, so it has no pin here. The lighting is for its date.`;
   else if (rangeOf(sc.spec.t) !== ranges[0]) text = '3D lighting covers 2024 to 2040, so it cannot show this date.';
   n.textContent = text;
   n.classList.toggle('err', mode === '3d' && !!err3d);
@@ -468,10 +469,18 @@ function showStage() {
     stage.classList.add('loading');
     import('../view3d').then(({ mount3D }) => {
       view3d = mount3D($('#s3d'), {
-        dataBase, startZoom: 0.62,
+        dataBase, startZoom: 0.62, region: regionOf(cur().spec.lat, cur().spec.lon),
+        onPick: (lat, lon) => {
+          const c = cur();
+          if (!c) return;
+          c.spec.site = 'custom';
+          c.spec.lat = +lat.toFixed(5); c.spec.lon = +lon.toFixed(5);
+          changed(c);
+        },
         onReady: () => { stage.classList.remove('loading'); syncStage(); },
         onError: () => stage.classList.remove('loading'), // the module shows its own message
       });
+      if (import.meta.env.DEV) (window as unknown as { __view3d?: View3DHandle }).__view3d = view3d; // self-check hooks, dev server only
       syncStage();
     }).catch((e) => {
       stage.classList.remove('loading'); loading3d = false;
@@ -487,8 +496,15 @@ function showStage() {
 function syncStage() {
   map?.setMarkers(scs.map((c, i) => ({ lat: c.spec.lat, lon: c.spec.lon, label: LETTERS[i] })));
   if (!view3d || !scs.length) return;
-  view3d.setSites(scs.map((c, i) => ({ c, i })).filter(({ c }) => inTile(c.spec.lat, c.spec.lon))
-    .map(({ c, i }) => ({ lat: c.spec.lat, lon: c.spec.lon, mast: c.spec.mast, label: LETTERS[i] })));
+  // The view shows the region of the selected scenario and pins only the scenarios inside it.
+  const region = regionOf(cur().spec.lat, cur().spec.lon);
+  if (region && view3d.region() !== region) {
+    const stage = $('.stage');
+    stage.classList.add('loading');
+    regionLoads++;
+    view3d.setRegion(region).catch(() => {}).finally(() => { if (!--regionLoads) stage.classList.remove('loading'); }); // on failure the view keeps the old region
+  }
+  view3d.setSites(scs.map((c, i) => ({ lat: c.spec.lat, lon: c.spec.lon, mast: c.spec.mast, label: LETTERS[i] })));
   push3dTime();
 }
 
@@ -679,11 +695,12 @@ export async function start(root: HTMLElement) {
   </div>`;
 
   try {
-    const [list, r] = await Promise.all([
+    const [list, r, dem] = await Promise.all([
       fetch(dataBase + 'sites.json').then((x) => { if (!x.ok) throw new Error(`sites.json: HTTP ${x.status}`); return x.json(); }),
       core.range(),
+      fetch(dataBase + 'dem/manifest.json').then((x) => (x.ok ? x.json() : { tiles: [] })).catch(() => ({ tiles: [] })), // no manifest: no 3D regions
     ]);
-    sites = list; ranges = r.ranges;
+    sites = list; ranges = r.ranges; demTiles = dem.tiles;
   } catch (e) {
     $('#err').textContent = `Could not load data: ${(e as Error).message}`;
     return;
