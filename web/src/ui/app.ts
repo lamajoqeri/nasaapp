@@ -903,7 +903,7 @@ function registerActions() {
   });
   register({
     name: 'view.set',
-    description: 'Change what the stage shows: the 3D terrain or the 2D map, and on the map its region and colour overlay. Giving region or overlay switches to the map. Overlays shade the south_pole region only (±304 km around the pole): terrain = plain hillshade; sunlight = % of time the Sun is visible (NASA average, poleward of 85°S); earth = % of time Earth is visible (same); shadow = permanently shadowed regions, where the Sun never rises and water ice can survive (NASA map, poleward of 85°S); elevation = height vs the 1737.4 km reference radius (240 m DEM); slope = surface slope in degrees over a 240 m baseline (≤5° green is landing-friendly, ≥15° red). The 3D view always shows the region of the selected scenario. Opens the mission tab if another tab is showing.',
+    description: 'Change what the stage shows: the 3D terrain or the 2D map, and on the map its region and colour overlay. Giving region or overlay switches to the map. Overlays shade the south_pole region only (±304 km around the pole): terrain = plain hillshade; sunlight = % of time the Sun is visible (NASA average over the whole polar map: 120 m to 85°S, 240 m beyond); earth = % of time Earth is visible (same); shadow = permanently shadowed regions, where the Sun never rises and water ice can survive (NASA map, poleward of 85°S); elevation = height vs the 1737.4 km reference radius (240 m DEM); slope = surface slope in degrees over a 240 m baseline (≤5° green is landing-friendly, ≥15° red). The 3D view always shows the region of the selected scenario. Opens the mission tab if another tab is showing.',
     schema: schema({
       mode: { type: 'string', enum: ['3d', 'map'], description: 'Stage view.' },
       region: { type: 'string', enum: Object.keys(MAP_REGION), description: 'Map region.' },
@@ -967,7 +967,7 @@ function registerActions() {
     lat: num('Latitude in degrees, -90 to 90 (with lon, instead of id).'),
     lon: num('Longitude in degrees east, -180 to 360.'),
   };
-  const PGDA_NOTE = 'sunPct and earthPct are NASA PGDA long-term averages over all dates (% of time the Sun / Earth is visible, poleward of ~85°S; null outside), unlike scenario metrics, which are for the chosen landing date.';
+  const PGDA_NOTE = 'sunPct and earthPct are NASA PGDA long-term averages over all dates (% of time the Sun / Earth is visible: 120 m data to ~85°S, 240 m to ~80°S; null outside), unlike scenario metrics, which are for the chosen landing date.';
   const UNITS = { elevation_m: 'm vs the 1737.4 km reference radius', slope_deg: 'degrees, central differences over ±1 DEM pixel', resolution_m: 'DEM pixel spacing used, m: 20 in the fine polar tiles, 240 elsewhere near the south pole, several km on the whole-Moon grid away from it', sunPct: '% of time, PGDA average', earthPct: '% of time, PGDA average' };
   register({
     name: 'terrain.sample',

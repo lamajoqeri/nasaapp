@@ -198,7 +198,7 @@ export function tileBounds(t: { x0: number; y0: number; px: number; w: number; h
 const BG = '#0a0b0d', FG = '#e8e6e1', MUTED = '#8e939c';
 const BG_RGB: RGB = [10, 11, 13], SUN_RGB: RGB = [242, 181, 68], EARTH_RGB: RGB = [91, 156, 245];
 const OVERLAY_ALPHA = 0.7;
-const OVERLAY_R = 150000, OVERLAY_FEATHER = 10000;   // PGDA data disc (≈85°S) and its fade, metres
+const OVERLAY_R = 150000, OVERLAY_FEATHER = 10000;   // PGDA 120 m data disc (≈85°S) and its fade into the 240 m wide map, metres
 const DETAIL_FEATHER = 0.15;                          // detail map fades out over its outer 15%
 const MIN_VIEW_M = 5000;       // polar max zoom: a 5 km area fills the view
 const GLOBAL_MAX_ZOOM = 40;    // global max zoom, relative to fit
@@ -212,6 +212,7 @@ const DEFAULT_BOUNDS: Record<string, Bounds> = {
   sp_sun: [-151740, -151740, 151740, 151740],
   sp_earth: [-151740, -151740, 151740, 151740],
   sp_psr: [-151740, -151740, 151740, 151740],
+  sp_sun_wide: [-304080, -304080, 304080, 304080], sp_earth_wide: [-304080, -304080, 304080, 304080], sp_psr_wide: [-304080, -304080, 304080, 304080], // same NASA product, 75°S edition, over the whole polar map
   elevation: [-304000, -303920, 303920, 304000],
   slope: [-304000, -303920, 303920, 304000],
   global_hillshade: [0, -90, 360, 90],
@@ -219,14 +220,17 @@ const DEFAULT_BOUNDS: Record<string, Bounds> = {
 const FILES: Record<string, string> = {
   sp_hillshade: 'sp_hillshade.png', shackleton_hillshade: 'shackleton_hillshade.png',
   sp_sun: 'sp_sun.png', sp_earth: 'sp_earth.png', sp_psr: 'sp_psr.png', global_hillshade: 'global_hillshade.jpg',
+  sp_sun_wide: 'sp_sun_wide.png', sp_earth_wide: 'sp_earth_wide.png', sp_psr_wide: 'sp_psr_wide.png',
 };
 const NAMES: Record<string, string> = {
   sp_hillshade: 'south pole map', shackleton_hillshade: 'Shackleton detail map',
   sp_sun: 'sunlight overlay', sp_earth: 'Earth-view overlay', sp_psr: 'permanent-shadow overlay', global_hillshade: 'whole-Moon map',
+  sp_sun_wide: 'sunlight overlay beyond 85°S', sp_earth_wide: 'Earth-view overlay beyond 85°S', sp_psr_wide: 'permanent-shadow overlay beyond 85°S',
 };
 
 export type LayerId = 'none' | 'sp_sun' | 'sp_earth' | 'sp_psr' | 'elevation' | 'slope';
-const isPgda = (id: string) => id === 'sp_sun' || id === 'sp_earth' || id === 'sp_psr'; // NASA PGDA image layers, 85°S disc
+const isPgda = (id: string): id is PgdaId => id === 'sp_sun' || id === 'sp_earth' || id === 'sp_psr'; // NASA PGDA image layers
+type PgdaId = 'sp_sun' | 'sp_earth' | 'sp_psr';
 /** @deprecated old name */
 export type OverlayId = LayerId;
 type Layer = Exclude<LayerId, 'none'>;
@@ -235,7 +239,7 @@ interface Overlay { canvas: HTMLCanvasElement; w: number; h: number; at(i: numbe
 
 const DEM_TILE = 'sp_240m';
 const SLOPE_MAX = 20;
-const PGDA_NOTE = 'data poleward of 85°S';
+const PGDA_NOTE = 'NASA data: 120 m to 85°S, 240 m to the map edge';
 const LAYERS: Record<Layer, { label: string; lut: Uint8ClampedArray; ends(lo: number, hi: number): [string, string]; note: string; read(v: number): string }> = {
   sp_sun: {
     label: 'Sunlight %', lut: rampLut(SUN_RGB), ends: () => ['0%', '100% of time'], note: PGDA_NOTE,
@@ -324,6 +328,8 @@ export function mountMap(el: HTMLElement, opts: {
   const images: Record<string, HTMLImageElement> = {};
   const requested = new Set<string>();
   const overlays: Partial<Record<Layer, Overlay>> = {};
+  const wides: Partial<Record<PgdaId, Overlay>> = {}; // the 240 m PGDA maps under the 120 m disc
+  const scratch = document.createElement('canvas').getContext('2d')!; // PGDA disc + wide map composited before the overlay alpha
   const building = new Set<Layer>();             // DEM layers being fetched/computed
   let detail: CanvasImageSource | null = null;   // Shackleton map, matched + feathered into the base
   const errors = new Set<string>();
@@ -363,8 +369,12 @@ export function mountMap(el: HTMLElement, opts: {
     img.onload = () => {
       if (dead) return;
       images[id] = img;
-      if (isPgda(id)) {
-        try { overlays[id as Layer] = buildOverlay(img, LAYERS[id as Layer].lut, bounds[id]); } catch { fail(NAMES[id]); }
+      const pg = id.replace(/_wide$/, '');
+      if (isPgda(pg)) {
+        try {
+          if (pg === id) overlays[pg] = buildOverlay(img, LAYERS[pg].lut, bounds[id]);
+          else wides[pg] = buildOverlay(img, LAYERS[pg].lut, bounds[id], Infinity); // no disc mask: covers the whole map
+        } catch { fail(NAMES[id]); }
       }
       // Build the blended detail once both images are in, here rather than in the draw path (4M-pixel loop).
       const d = images.shackleton_hillshade, base = images.sp_hillshade;
@@ -516,7 +526,7 @@ export function mountMap(el: HTMLElement, opts: {
 
   function draw() { if (!raf && !dead) raf = requestAnimationFrame(drawNow); }
 
-  function drawGeo(img: CanvasImageSource, iw: number, ih: number, b: Bounds) {
+  function drawGeo(img: CanvasImageSource, iw: number, ih: number, b: Bounds, to: CanvasRenderingContext2D = ctx) {
     // Crop to the visible part so the destination rect stays small at high zoom.
     const [vx0, vy1] = toMap(view, 0, 0), [vx1, vy0] = toMap(view, view.w, view.h);
     const x0 = Math.max(b[0], vx0), x1 = Math.min(b[2], vx1), y0 = Math.max(b[1], vy0), y1 = Math.min(b[3], vy1);
@@ -525,7 +535,7 @@ export function mountMap(el: HTMLElement, opts: {
     // Whole-pixel destination edges: two copies of the whole-Moon image meet at 0° without an anti-aliased seam.
     const [sx0, sy0] = toScreen(view, x0, y1), [sx1, sy1] = toScreen(view, x1, y0);
     const dx = Math.round(sx0), dy = Math.round(sy0);
-    ctx.drawImage(img, (x0 - b[0]) * kx, (b[3] - y1) * ky, (x1 - x0) * kx, (y1 - y0) * ky, dx, dy, Math.round(sx1) - dx, Math.round(sy1) - dy);
+    to.drawImage(img, (x0 - b[0]) * kx, (b[3] - y1) * ky, (x1 - x0) * kx, (y1 - y0) * ky, dx, dy, Math.round(sx1) - dx, Math.round(sy1) - dy);
   }
 
   function text(s: string, x: number, y: number, color = FG, align: CanvasTextAlign = 'left') {
@@ -567,7 +577,18 @@ export function mountMap(el: HTMLElement, opts: {
         if (detail) drawGeo(detail, d.naturalWidth, d.naturalHeight, sb);
       }
       const ov = overlay !== 'none' ? overlays[overlay] : undefined;
-      if (ov) {
+      if (isPgda(overlay)) load(overlay + '_wide'); // lazily: only once its layer is shown
+      const wide = isPgda(overlay) ? wides[overlay] : undefined;
+      if (wide) {
+        // The 120 m disc fades into the 240 m map at full strength first, so the overlap is not tinted twice.
+        const c = scratch.canvas;
+        if (c.width !== canvas.width || c.height !== canvas.height) { c.width = canvas.width; c.height = canvas.height; }
+        scratch.setTransform(1, 0, 0, 1, 0, 0); scratch.clearRect(0, 0, c.width, c.height);
+        scratch.setTransform(ctx.getTransform()); scratch.imageSmoothingQuality = 'high';
+        drawGeo(wide.canvas, wide.w, wide.h, bounds[overlay + '_wide'], scratch);
+        if (ov) drawGeo(ov.canvas, ov.w, ov.h, bounds[overlay], scratch);
+        ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = OVERLAY_ALPHA; ctx.drawImage(c, 0, 0); ctx.restore();
+      } else if (ov) {
         ctx.globalAlpha = OVERLAY_ALPHA;
         drawGeo(ov.canvas, ov.w, ov.h, bounds[overlay]);
         ctx.globalAlpha = 1;
@@ -659,9 +680,10 @@ export function mountMap(el: HTMLElement, opts: {
 
   /** Layer value at map point (x, y), null outside its coverage or before it's built. */
   function pct(id: Layer, x: number, y: number): number | null {
-    const o = overlays[id];
-    if (isPgda(id) && Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
-    const p = o && imgPixel(bounds[id], o.w, o.h, x, y);
+    // PGDA: the 120 m disc where it is drawn, else the 240 m wide map
+    const disc = !isPgda(id) || (Math.hypot(x, y) <= OVERLAY_R && !!overlays[id]);
+    const o = disc ? overlays[id] : wides[id as PgdaId];
+    const p = o && imgPixel(bounds[disc ? id : id + '_wide'], o.w, o.h, x, y);
     return o && p ? o.at(p[1] * o.w + p[0]) : null;
   }
 
@@ -861,10 +883,10 @@ function canvasOf(src: CanvasImageSource, w: number, h: number, sx = 0, sy = 0, 
 
 /**
  * Recolour an overlay's gray channel through `lut`, once, and mask it to a feathered disc of
- * radius OVERLAY_R around the pole (the PGDA square's corners would otherwise end in a hard edge).
+ * radius `r` around the pole (the 120 m PGDA square's corners would otherwise end in a hard edge; Infinity = no mask).
  * Gray 0 is real data (never lit / never sees Earth), not nodata — the PGDA PNGs have no nodata.
  */
-function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds): Overlay {
+function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds, r = OVERLAY_R): Overlay {
   const w = img.naturalWidth, h = img.naturalHeight;
   const { canvas, g, im } = canvasOf(img, w, h), px = im.data;
   const kx = (b[2] - b[0]) / w, ky = (b[3] - b[1]) / h;
@@ -873,7 +895,7 @@ function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds):
     const v = (data[i] = px[j]);
     px[j] = lut[v * 3]; px[j + 1] = lut[v * 3 + 1]; px[j + 2] = lut[v * 3 + 2];
     const x = b[0] + ((i % w) + 0.5) * kx, y = b[3] - (Math.floor(i / w) + 0.5) * ky;
-    px[j + 3] = 255 * feather(OVERLAY_R - Math.hypot(x, y), OVERLAY_FEATHER);
+    px[j + 3] = 255 * feather(r - Math.hypot(x, y), OVERLAY_FEATHER);
   }
   g.putImageData(im, 0, 0);
   return { canvas, w, h, at: (i) => (data[i] / 255) * 100, lo: 0, hi: 100 };

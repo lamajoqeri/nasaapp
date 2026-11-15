@@ -64,7 +64,7 @@ function dsnBits(s: { t: Float64Array }, d: Dsn | null): Uint8Array {
   return out;
 }
 
-/** The PGDA sp_sun / sp_earth PNGs, decoded once to their gray channel. A map that fails to load reads as null. */
+/** The PGDA sp_sun / sp_earth PNGs (and their 240 m *_wide maps), decoded once to their gray channel. A map that fails to load reads as null. */
 let pgda: Promise<Pgda> | null = null;
 const loadPgda = () => (pgda ??= (async () => {
   const index: { id: string; file: string; bounds?: number[] }[] = await get('maps/index.json').then(text, () => []);
@@ -80,8 +80,8 @@ const loadPgda = () => (pgda ??= (async () => {
       return { w: bmp.width, h: bmp.height, bounds: m.bounds, data };
     } catch { return null; }
   };
-  const [sun, earth] = await Promise.all([one('sp_sun'), one('sp_earth')]);
-  return { sun, earth };
+  const [sun, earth, sunWide, earthWide] = await Promise.all([one('sp_sun'), one('sp_earth'), one('sp_sun_wide'), one('sp_earth_wide')]);
+  return { sun, earth, sunWide, earthWide };
 })());
 
 async function handle(req: Request): Promise<unknown> {
