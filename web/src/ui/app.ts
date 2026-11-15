@@ -22,7 +22,6 @@ type View = 'mission' | 'evidence';
 type Mode = '3d' | 'map';
 
 const MASTS = [0, 2, 5, 10];
-const NUDGES = [50, 100, 250, 500];
 const WIN = 29.5 * DAY;
 const PLAY_MS = 15000;      // one lunar day of playback
 const MAX = 4;
@@ -45,7 +44,7 @@ const scs: Scenario[] = [];
 const cards = new Map<Scenario, HTMLElement>();
 const chips = new Map<Scenario, HTMLButtonElement>();
 const pending = new Map<Scenario, Promise<unknown>>(); // worker results in flight, so actions can wait for them
-let sel = 0, slip = 0, hours = 0, playing = false, step = 100;
+let sel = 0, slip = 0, hours = 0, playing = false;
 let view: View = 'mission', mode: Mode = '3d', autoMap = false, forced3d = false, cmpOpen = false, editorOpen = false;
 let map: MapHandle | undefined, view3d: View3DHandle | undefined, loading3d = false, err3d = '', evidenceMounted = false;
 let plotW = 0, lanesQueued = false;
@@ -113,11 +112,6 @@ function makeCard(sc: Scenario): HTMLElement {
         <label class="f"><span>Landing, UTC</span><input class="date" type="datetime-local" step="3600"></label>
         <label class="f"><span>Mast</span><select class="mast">${MASTS.map((m) => `<option value="${m}">${m} m</option>`).join('')}</select></label>
       </div>
-      <div class="nudge" role="group" aria-label="Move the site">
-        <span class="lbl">Move the site</span>
-        <div class="pad">${[['n', 'N', 'north'], ['w', 'W', 'west'], ['e', 'E', 'east'], ['s', 'S', 'south']].map(([k, l, w]) => `<button type="button" data-nudge="${k}" aria-label="Move ${w}" title="Move ${w}">${l}</button>`).join('')}<i aria-hidden="true"></i></div>
-        <div class="seg steps" role="group" aria-label="Distance per move">${NUDGES.map((m) => `<button type="button" data-step="${m}">${m} m</button>`).join('')}</div>
-      </div>
       <p class="note"></p>
       <button class="rm" type="button">${ICON.trash}<span>Remove scenario</span></button>
     </div></div>`;
@@ -159,10 +153,6 @@ function makeCard(sc: Scenario): HTMLElement {
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>('[data-t]');
     if (b) ui('scenario.update', { id: id(), t: iso(+b.dataset.t!) });
-    const n = t.closest<HTMLElement>('[data-nudge]');
-    if (n) ui('scenario.nudge', { id: id(), dir: n.dataset.nudge!.toUpperCase(), m: step });
-    const st = t.closest<HTMLElement>('[data-step]');
-    if (st) { step = +st.dataset.step!; for (const s of scs) syncCard(s); } // how far the next nudge goes: an argument, not app state
   });
   return el;
 }
@@ -203,7 +193,6 @@ function syncCard(sc: Scenario) {
   const date = $<HTMLInputElement>('.date', el);
   date.min = isoMin(Math.min(...ranges.map((x) => x.t0))); date.max = isoMin(ranges[0].t1 - WIN); date.value = isoMin(spec.t);
   $<HTMLSelectElement>('.mast', el).value = String(spec.mast);
-  for (const b of el.querySelectorAll<HTMLElement>('[data-step]')) b.setAttribute('aria-pressed', String(+b.dataset.step! === step));
   let note = rec?.note ? esc(rec.note) : spec.lat < -80
     ? 'Custom point. Terrain here is 20 m where a detailed tile exists, 240 m otherwise.'
     : 'Custom point. Outside the south polar region terrain is coarse (about 4 km), so the horizon is smoother than reality.';
