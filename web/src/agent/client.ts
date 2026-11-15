@@ -10,8 +10,11 @@ export const TOO_LONG = 'This chat is now too long for the model. Start a new ch
 const KEY = 'shackleton-live.anthropic-key';
 let mem = '';  // fallback when storage is blocked (private windows): the key then lasts until the tab closes
 
+// Dev only: a key in web/.env.local (gitignored) is preloaded. Vite folds DEV to false in builds, so it never ships.
+const DEV_KEY: string = import.meta.env.DEV ? (import.meta.env.VITE_ANTHROPIC_API_KEY ?? '') : '';
+
 function key(): string {
-  try { return localStorage.getItem(KEY) ?? mem; } catch { return mem; }
+  try { return localStorage.getItem(KEY) ?? (mem || DEV_KEY); } catch { return mem || DEV_KEY; }
 }
 export const ready = () => !!key();
 export function signOut(): void {
