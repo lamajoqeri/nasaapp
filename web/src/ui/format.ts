@@ -15,6 +15,8 @@ export function dur(h: number): string {
 /** ms -> "YYYY-MM-DDTHH:MM" (UTC), the datetime-local value format. */
 export const isoMin = (t: number) => new Date(t).toISOString().slice(0, 16);
 export const utc = (t: number) => isoMin(t).replace('T', ' ') + ' UTC';
+/** sites.json landing date -> ms. Full ISO UTC touchdown time, or a bare date (read as 00:00 UTC). */
+export const landingT = (d: string) => Date.parse(d.length > 10 ? d : d + 'T00:00:00Z');
 
 const pct = (x: number) => `${Math.round(x)}%`;
 const deg = (x: number) => `${x.toFixed(1)}°`;
@@ -43,7 +45,7 @@ export function rows(m: Metrics, u: Uncertainty | null, mission?: Mission): Row[
   const earthH = hidden ? m.hoursToEarthrise : m.hoursToEarthset;
   const lit = mean('pctLit'), longest = mean('longestDarkHours'), dte = mean('dteHours');
   return [
-    { key: 'sunEl', label: 'Sun elevation', text: deg(m.sunEl), sd: '', num: m.sunEl, f: deg, eps: 0.05, good: 0 },
+    { key: 'sunEl', label: 'Sun elevation (vs level)', text: deg(m.sunEl), sd: '', num: m.sunEl, f: deg, eps: 0.05, good: 0 },
     { key: 'sunDisk', label: 'Sun disk visible', text: pct(m.sunFrac * 100), sd: sd('sunFrac', (x) => pct(x * 100)), num: m.sunFrac * 100, f: pct, eps: 0.5, good: 1 },
     {
       key: 'sunEvent', label: dark ? 'Sunrise in' : 'Sunset in', ok: !dark,
@@ -69,11 +71,11 @@ function missionRows(x: Mission): Row[] {
   const c = x.commsHours, b = x.battery;
   return [
     {
-      key: 'dsn', label: 'Deep Space Network', sd: '', num: c, f: dur, eps: 0.5, good: 1,
+      key: 'dsn', label: 'Deep Space Network, 29.5 d', sd: '', num: c, f: dur, eps: 0.5, good: 1,
       text: c === null ? 'no data for this era' : `${dur(c)} (${pct((100 * c) / WIN_H)})`,
     },
     {
-      key: 'battery', label: 'Battery', sd: '', num: b.survivalH ?? WIN_H, f: dur, eps: 0.5, good: 1, ok: b.survivalH === null,
+      key: 'battery', label: 'Battery, 29.5 d', sd: '', num: b.survivalH ?? WIN_H, f: dur, eps: 0.5, good: 1, ok: b.survivalH === null,
       text: b.survivalH === null ? `survives, lowest ${pct(b.minSoc * 100)}` : `empty after ${dur(b.survivalH)}`,
     },
     { key: 'psr', label: 'Permanent shadow', sd: '', num: x.psrM, f: dist, eps: 1, good: 0, text: x.psrM === null ? 'no data north of 85°S' : x.psrM < 1 ? 'site is inside one' : `${dist(x.psrM)} away` },

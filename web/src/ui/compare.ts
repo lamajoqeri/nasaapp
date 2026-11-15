@@ -26,15 +26,15 @@ export interface CompareCol {
 }
 
 const LABELS: Record<RowKey, [string, string]> = {
-  sunEl: ['Sun elevation', 'at landing'],
+  sunEl: ['Sun elevation', 'at landing, above a level horizon'],
   sunDisk: ['Sun disk visible', 'at landing'],
   sunEvent: ['Next sunset or sunrise', ''],
   earthEvent: ['Next Earthset or Earthrise', ''],
   lit: ['Sunlit', 'share of the 29.5 days'],
   dark: ['Longest dark', 'unbroken stretch'],
   earth: ['Earth in view', 'direct link possible'],
-  dsn: ['Deep Space Network', 'a ground station can hear the site'],
-  battery: ['Battery', '200 W panel, 100 W load, 1.5 kWh'],
+  dsn: ['Deep Space Network', 'over the 29.5 days, a ground station can hear the site'],
+  battery: ['Battery', 'over the 29.5 days; 200 W panel, 100 W load, 1.5 kWh'],
   psr: ['Nearest permanent shadow', 'where water ice can survive'],
 };
 const ORDER: RowKey[] = ['lit', 'dark', 'earth', 'dsn', 'battery', 'psr', 'sunEvent', 'earthEvent', 'sunEl', 'sunDisk'];

@@ -1,6 +1,6 @@
 // One scenario: its spec, its worker results and the rows derived from them. No DOM.
 import { core, type Range, type ScenarioResult, type Site, type StripResult } from '../core/api';
-import { DAY, rows, type Row } from './format';
+import { DAY, isoMin, rows, type Row } from './format';
 
 /** `site` is a sites.json id or 'custom'. */
 export interface Spec { site: string; lat: number; lon: number; t: number; mast: number }
@@ -51,6 +51,12 @@ export class Scenario {
     const tok = ++this.slipToken, slip = this.env.slip();
     this.slipError = '';
     if (!slip || !this.base) { this.slipped = this.srows = undefined; return this.env.onUpdate(this); }
+    const r = this.env.rangeOf(this.spec.t), max = Math.floor((r.t1 - 29.5 * DAY - this.spec.t) / DAY);
+    if (slip > max) { // the delayed 29.5-day window would run off the end of the ephemeris table
+      this.slipped = this.srows = undefined;
+      this.slipError = `Delay of ${slip} d runs past our data (ends ${isoMin(r.t1).slice(0, 10)}); up to ${Math.max(0, max)} d works for this date.`;
+      return this.env.onUpdate(this);
+    }
     try {
       const r = await core.scenario(this.site(), this.spec.t + slip * DAY, { mc: false });
       if (tok !== this.slipToken) return;
