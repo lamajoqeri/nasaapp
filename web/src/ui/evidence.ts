@@ -243,6 +243,17 @@ export function mountEvidence(el: HTMLElement, opts: { dataBase: string }): { de
       <p class="ev-lead">Every prediction here rests on three things: where the Sun and Earth are, what the terrain horizon looks like from the site, and whether the two combine into the right shadows. Each was checked against an independent NASA source, and every check can be re-run with the scripts in this project.</p>
     </header>
     <section>
+      <h3>Why the south pole is hard, and how to read this tool</h3>
+      <ul class="ev-list">
+        <li><b>The Sun skims the horizon.</b> The Moon is tilted only 1.5°, so at the pole the Sun never climbs more than about 1.5° above a flat horizon. It circles the sky once a month at that height. A ridge a few hundred metres tall a few kilometres away, or a tall massif 100 km away, can hide it for days.</li>
+        <li><b>Earth bobs up and down.</b> Seen from the pole, Earth stays near one direction and rises and sinks by about 6° over a month. When it dips behind terrain, a lander has no direct radio link.</li>
+        <li><b>Small moves matter.</b> Because both bodies sit so low, moving a site 100 m can change Earth visibility from never to half the time. Try the 100 m move buttons on a scenario and watch the numbers.</li>
+        <li><b>Dates matter.</b> The same site can be sunlit all month in summer and dark for days in winter. Use the delay slider to see what a schedule slip does.</li>
+        <li><b>Reading the timeline.</b> Each scenario has two bands over the 29.5 days after landing: amber where the Sun is visible (brighter means more of the disk), blue where Earth is in view. Gaps are darkness or loss of contact.</li>
+        <li><b>Reading the horizon panel.</b> It is the view from the site unrolled into a strip: compass direction across, height above the horizon upward (stretched vertically). The grey shape is terrain. The Sun and Earth are visible when their marks are above it.</li>
+      </ul>
+    </section>
+    <section>
       <h3>Shadows vs real photos</h3>
       <p>We predict the shadow map at the moment each Lunar Reconnaissance Orbiter (LRO) Narrow Angle Camera photo was taken and compare it with the photo. Drag the divider to compare.</p>
       ${loading('bench')}

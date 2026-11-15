@@ -99,3 +99,5 @@
   .evidence .ev-table th, .evidence .ev-table td { padding-left: 10px; }
   .evidence .ev-plot figcaption { padding-left: 0; }
 }
+
+.evidence .ev-list li b { color: var(--fg); font-weight: 600; }

@@ -307,7 +307,7 @@ function paintInspector() {
         .map((l) => `<tr><th scope="row">${l}</th><td>–</td></tr>`).join('') + '</tbody>';
     return;
   }
-  $('#i-cap').textContent = caption(b.metrics);
+  $('#i-cap').textContent = `At landing: ${caption(b.metrics)}`;
   const TITLES: Partial<Record<Row['key'], string>> = {
     dsn: 'Hours when Earth is in view from the site and the Moon is above 10° at Goldstone, Madrid or Canberra',
     battery: '200 W Sun-tracking panel, constant 100 W load, 1.5 kWh of storage, starting full',
