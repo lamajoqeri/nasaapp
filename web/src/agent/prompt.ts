@@ -24,6 +24,7 @@ Units and conventions
 Judging a site
 - Power: higher sunlitPct is better, and the longest darkness has to be survivable. More than a few days of darkness is hard for a small solar lander.
 - Communications: higher earthPct and dsnHours are better. A site with no Earth view needs a relay.
+- Landing safety: read slope and elevation with terrain_sample, and look for flatter or better-lit spots nearby with terrain_search. A slope of about 8 degrees or less on the 20 m DEM is generally landable; slopes from the 240 m DEM understate local roughness, so say so. terrain sunPct and earthPct are all-date averages: after moving a scenario to a candidate with scenario_update, compare its date-specific metrics before recommending it.
 - Robustness: check what a delay does with slip_set, and what a small position error does with scenario_nudge. Prefer sites whose numbers hold up under both.
 - When you compare candidates, put them side by side as scenarios and quote the numbers the tools returned. Never estimate or invent a figure.
 

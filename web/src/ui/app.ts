@@ -883,6 +883,54 @@ function registerActions() {
       return { view: viewState() };
     },
   });
+  /** The point of a terrain action: a scenario's position, or lat+lon. */
+  const pointOf = (a: { id?: string; lat?: number; lon?: number }): [number, number] => {
+    if (a.id != null) {
+      if (a.lat != null || a.lon != null) throw new Error('give id, or lat and lon, not both.');
+      const sc = scOf(a.id);
+      return [sc.spec.lat, sc.spec.lon];
+    }
+    if (a.lat == null || a.lon == null) throw new Error('give id, or lat and lon together.');
+    if (!(Math.abs(a.lat) <= 90) || !(a.lon >= -180 && a.lon <= 360)) throw new Error(BAD_COORD);
+    return [a.lat, a.lon];
+  };
+  const WHERE = {
+    id: str('Scenario id (A to D) to read at its position. Or give lat and lon instead.'),
+    lat: num('Latitude in degrees, -90 to 90 (with lon, instead of id).'),
+    lon: num('Longitude in degrees east, -180 to 360.'),
+  };
+  const PGDA_NOTE = 'sunPct and earthPct are NASA PGDA long-term averages over all dates (% of time the Sun / Earth is visible, poleward of ~85°S; null outside), unlike scenario metrics, which are for the chosen landing date.';
+  const UNITS = { elevation_m: 'm vs the 1737.4 km reference radius', slope_deg: 'degrees, central differences over ±1 DEM pixel', resolution_m: 'DEM pixel spacing used (20 m in the fine polar tiles, 240 m elsewhere near the pole)', sunPct: '% of time, PGDA average', earthPct: '% of time, PGDA average' };
+  register({
+    name: 'terrain.sample',
+    description: `Read the terrain at a scenario's position (id) or at lat+lon: elevation (m), surface slope (degrees, from the finest DEM there: 20 m pixels in the Shackleton, de Gerlache, Malapert, Haworth and Mouton/Nobile tiles, else 240 m, which smooths out local roughness), and the NASA PGDA average sunlight and Earth-visibility % (long-term averages over all dates, not the scenario's date). Use it to judge how flat a landing spot is. Does not move anything.`,
+    schema: schema(WHERE),
+    run: async (a: { id?: string; lat?: number; lon?: number }) => {
+      const [lat, lon] = pointOf(a), p = await core.terrain(lat, lon);
+      if (!p) throw new Error('No elevation data covers that point.');
+      return { ...(a.id != null ? { id: idOf(scOf(a.id)) } : {}), ...p, units: UNITS, note: PGDA_NOTE };
+    },
+  });
+  register({
+    name: 'terrain.search',
+    description: `Find flat, well-lit spots near a scenario (id) or lat+lon: samples a grid within radius_m (default 500, 50 to 3000) at about the DEM resolution, keeps points with slope ≤ max_slope_deg (default 8), ranks them by PGDA average sunlight % then Earth %, and returns the top limit (default 5, at most 10) with lat, lon, distance_m and bearing_deg from the centre, elevation_m, slope_deg, sunPct, earthPct; plus the centre's own values and how many samples passed. PGDA % are all-date averages: to check a candidate for the actual landing date, move a scenario there with ${toolName('scenario.update')} {id, lat, lon} and read the date-specific metrics it returns. Does not move anything by itself.`,
+    schema: schema({
+      ...WHERE,
+      radius_m: num('Search radius in metres, 50 to 3000. Default 500.'),
+      max_slope_deg: num('Steepest slope to keep, degrees, 0 to 45. Default 8.'),
+      limit: { type: 'integer', description: 'How many candidates to return, 1 to 10. Default 5.' },
+    }),
+    run: async (a: { id?: string; lat?: number; lon?: number; radius_m?: number; max_slope_deg?: number; limit?: number }) => {
+      const [lat, lon] = pointOf(a);
+      const radius = a.radius_m ?? 500, maxSlope = a.max_slope_deg ?? 8, limit = a.limit ?? 5;
+      if (!(radius >= 50 && radius <= 3000)) throw new Error('radius_m must be 50 to 3000.');
+      if (!(maxSlope >= 0 && maxSlope <= 45)) throw new Error('max_slope_deg must be 0 to 45.');
+      if (!(limit >= 1 && limit <= 10)) throw new Error('limit must be 1 to 10.');
+      const r = await core.terrainSearch(lat, lon, { radius, maxSlope, limit });
+      if (!r.centre) throw new Error('No elevation data covers that point.');
+      return { ...(a.id != null ? { id: idOf(scOf(a.id)) } : {}), ...r, units: { ...UNITS, distance_m: 'm from the centre', bearing_deg: 'degrees clockwise from north' }, note: PGDA_NOTE };
+    },
+  });
   register({
     name: 'tab.set',
     description: 'Switch the page: "mission" (stage, inspector, timeline), "compare" (the side-by-side table of all scenarios, over the mission page) or "evidence" (validation against JPL Horizons, NASA maps and LRO photos).',

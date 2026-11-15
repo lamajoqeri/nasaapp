@@ -5,6 +5,7 @@ import { horizon, type Horizon } from './horizon';
 import { battery, commsHours, type Dsn } from './extra';
 import { monteCarlo } from './mc';
 import { metrics, series, type Site } from './series';
+import { terrainAt, terrainSearch, type Pgda, type Raster } from './terrain';
 import type { Mission, Request, ScenarioResult, StripResult } from './api';
 
 let dataBase = ''; // set by the first message from api.ts
@@ -61,8 +62,28 @@ function dsnBits(s: { t: Float64Array }, d: Dsn | null): Uint8Array {
   return out;
 }
 
+/** The PGDA sp_sun / sp_earth PNGs, decoded once to their gray channel. A map that fails to load reads as null. */
+let pgda: Promise<Pgda> | null = null;
+const loadPgda = () => (pgda ??= (async () => {
+  const index: { id: string; file: string; bounds?: number[] }[] = await get('maps/index.json').then(text, () => []);
+  const one = async (id: string): Promise<Raster | null> => {
+    const m = index.find((x) => x.id === id);
+    if (!m?.bounds) return null;
+    try {
+      const bmp = await createImageBitmap(new Blob([await get('maps/' + m.file)]), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+      const g = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d')!;
+      g.drawImage(bmp, 0, 0);
+      const px = g.getImageData(0, 0, bmp.width, bmp.height).data, data = new Uint8Array(bmp.width * bmp.height);
+      for (let i = 0; i < data.length; i++) data[i] = px[i * 4];
+      return { w: bmp.width, h: bmp.height, bounds: m.bounds, data };
+    } catch { return null; }
+  };
+  const [sun, earth] = await Promise.all([one('sp_sun'), one('sp_earth')]);
+  return { sun, earth };
+})());
+
 async function handle(req: Request): Promise<unknown> {
-  const { ephs, dsn } = await init();
+  const { dem, ephs, dsn } = await init();
   switch (req.type) {
     case 'range':
       return { t0: ephs[0].t0, t1: ephs[0].t1, ranges: ephs.map((e) => ({ t0: e.t0, t1: e.t1 })) };
@@ -86,6 +107,12 @@ async function handle(req: Request): Promise<unknown> {
       const s = series(eph, req.site, h, t0, t1, req.stepMs ?? 3600e3, req.earthMargin ?? 0);
       const res: StripResult = { t0, stepMs: s.stepMs, sunFrac: s.sunFrac, earthVis: s.earthVis };
       return res;
+    }
+    case 'terrain':
+    case 'terrainSearch': {
+      const radius = req.type === 'terrain' ? 0 : req.radius ?? 500;
+      const [p] = await Promise.all([loadPgda(), dem.ensure(req.lat, req.lon, radius + 2000)]); // + room for the ±px slope stencil
+      return req.type === 'terrain' ? terrainAt(dem, p, req.lat, req.lon) : terrainSearch(dem, p, req.lat, req.lon, radius, req.maxSlope, req.limit);
     }
   }
 }

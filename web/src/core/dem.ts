@@ -12,6 +12,7 @@ export type Loader = (file: string) => Promise<ArrayBuffer>;
 /** Manifest-driven DEM. Tiles finest first; first loaded tile containing the point wins. */
 export class Dem {
   sigma = 0; // sigma_h of the tile that served the last sample
+  tile: Tile | null = null; // the tile that served the last sample
   private pending = new Map<string, Promise<void>>();
 
   constructor(public tiles: Tile[], private load: Loader) {}
@@ -91,9 +92,11 @@ export class Dem {
       const v = (a[r0 * w + c0] * (1 - fc) + a[r0 * w + c1] * fc) * (1 - fr)
               + (a[(r0 + 1) * w + c0] * (1 - fc) + a[(r0 + 1) * w + c1] * fc) * fr;
       this.sigma = t.sigma_h;
+      this.tile = t;
       return t.offset + t.scale * v;
     }
     this.sigma = 0;
+    this.tile = null;
     return 0;
   }
 

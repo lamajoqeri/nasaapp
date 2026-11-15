@@ -58,3 +58,10 @@ export function horizonAt(hor: ArrayLike<number>, az: number): number {
   const i0 = Math.floor(i), f = i - i0, n = hor.length;
   return hor[((i0 % n) + n) % n] * (1 - f) + hor[(((i0 + 1) % n) + n) % n] * f;
 }
+
+/** [lat, lon] reached by going `m` metres from (lat, lon) along a great circle at `bearing` degrees (0 = north, 90 = east). */
+export function offset(lat: number, lon: number, bearing: number, m: number): [number, number] {
+  const { e, n, u } = enu(lat, lon), b = bearing * DEG, a = m / R;
+  const p = u.map((v, i) => Math.cos(a) * v + Math.sin(a) * (Math.cos(b) * n[i] + Math.sin(b) * e[i]));
+  return [Math.asin(Math.max(-1, Math.min(1, p[2]))) / DEG, Math.atan2(p[1], p[0]) / DEG];
+}
