@@ -823,8 +823,10 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
         c.beginPath(); c.moveTo(x, H); c.lineTo(x, H - (major ? 9 : 5)); c.stroke();
         if (!major) continue;
         const d = ((Math.round(az * 10) / 10) % 360 + 360) % 360, card = d % 90 === 0 ? 'NESW'[d / 90] : '';
+        const txt = card || `${d}°`, half = c.measureText(txt).width / 2;
+        if (x - half < 2 || x + half > w - 2) continue; // a label cut by the edge reads as a different number
         c.fillStyle = card ? azInk.strong : azInk.text;
-        c.fillText(card || `${d}°`, x, H - 13);
+        c.fillText(txt, x, H - 13);
       }
     }
 

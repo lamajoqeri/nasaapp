@@ -1,5 +1,5 @@
 // Canvas site picker: south-polar stereographic view + whole-Moon equirectangular view.
-// Map units: metres (spstere, y up) in the polar view; degrees (lon 0..360, lat) in the global view.
+// Map units: metres (spstere, y up) in the polar view; degrees (lon -180..180, lat) in the global view, so the near side is centred.
 import './map.css';
 import { spFwd, spInv } from '../core/geom';
 
@@ -66,7 +66,19 @@ export const lon180 = (lon: number) => lon360(lon + 180) - 180;
 
 /** lat/lon (lon any convention) -> map units of the given view. */
 export function llToMap(mode: Mode, lat: number, lon: number): [number, number] {
-  return mode === 'polar' ? spFwd(lat, lon) : [lon360(lon), lat];
+  return mode === 'polar' ? spFwd(lat, lon) : [lon180(lon), lat];
+}
+
+/** The global view's extent: near side (0° E) in the middle, the seam at 180° on the far side. */
+export const GLOBAL_VIEW: Bounds = [-180, -90, 180, 90];
+/** An image covering `b` in degrees of longitude, as copies shifted by whole turns that together cover -180..180. */
+export function wrapCopies(b: Bounds): Bounds[] {
+  const out: Bounds[] = [];
+  for (let k = -1; k <= 1; k++) {
+    const c: Bounds = [b[0] + 360 * k, b[1], b[2] + 360 * k, b[3]];
+    if (c[0] < 180 && c[2] > -180) out.push(c);
+  }
+  return out;
 }
 
 /** Map units -> [lat, lon] with lon in -180..180. */
@@ -260,6 +272,12 @@ export function mountMap(el: HTMLElement, opts: {
   onPick(lat: number, lon: number, siteId?: string): void;
   /** Region/overlay toolbar clicks go here when given (so the app can route them through its actions). */
   onBar?(c: { mode?: Mode; overlay?: LayerId }): void;
+  /** View to open on (e.g. from a shared link) instead of the default. */
+  start?: { mode: Mode; overlay: LayerId; center?: [number, number]; kmAcross?: number };
+  /** The region, layer, centre or zoom changed. */
+  onView?(): void;
+  /** Elements floating over the canvas (outside the map's own chrome): site labels are not drawn under them. */
+  covers?(): Element[];
 }): MapHandle {
   const root = document.createElement('div');
   root.className = 'lmap';
@@ -328,7 +346,7 @@ export function mountMap(el: HTMLElement, opts: {
   let crossTimer = 0, raf = 0, indexReady = false;
 
   const baseId = () => (mode === 'polar' ? 'sp_hillshade' : 'global_hillshade');
-  const baseBounds = () => bounds[baseId()];
+  const baseBounds = () => (mode === 'polar' ? bounds.sp_hillshade : GLOBAL_VIEW);
   const minScale = () => fitScale(baseBounds(), view.w, view.h);
   const maxScale = () => (mode === 'polar' ? Math.max(minScale(), view.w / MIN_VIEW_M) : minScale() * GLOBAL_MAX_ZOOM);
   const clampScale = (s: number) => Math.min(maxScale(), Math.max(minScale(), s));
@@ -420,7 +438,7 @@ export function mountMap(el: HTMLElement, opts: {
 
   // ----- view state -----
 
-  function setView(v: View) { view = clampView({ ...v, scale: clampScale(v.scale) }, baseBounds()); draw(); }
+  function setView(v: View) { view = clampView({ ...v, scale: clampScale(v.scale) }, baseBounds()); draw(); opts.onView?.(); }
 
   function resetView() {
     const b = baseBounds(), s = saved[mode];
@@ -458,6 +476,7 @@ export function mountMap(el: HTMLElement, opts: {
     if (m === 'global') load('global_hillshade');
     refreshLoading();
     if (view.w) resetView();
+    opts.onView?.();
   }
 
   function setOverlay(o: LayerId) {
@@ -465,7 +484,7 @@ export function mountMap(el: HTMLElement, opts: {
     if (o !== 'none') ensureLayer(o);
     refreshLoading();
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-ov]')) b.setAttribute('aria-pressed', String(b.dataset.ov === o));
-    syncChrome(); draw();
+    syncChrome(); draw(); opts.onView?.();
   }
 
   function syncChrome() {
@@ -503,8 +522,10 @@ export function mountMap(el: HTMLElement, opts: {
     const x0 = Math.max(b[0], vx0), x1 = Math.min(b[2], vx1), y0 = Math.max(b[1], vy0), y1 = Math.min(b[3], vy1);
     if (x1 <= x0 || y1 <= y0) return;
     const kx = iw / (b[2] - b[0]), ky = ih / (b[3] - b[1]);
-    const [dx, dy] = toScreen(view, x0, y1);
-    ctx.drawImage(img, (x0 - b[0]) * kx, (b[3] - y1) * ky, (x1 - x0) * kx, (y1 - y0) * ky, dx, dy, (x1 - x0) * view.scale, (y1 - y0) * view.scale);
+    // Whole-pixel destination edges: two copies of the whole-Moon image meet at 0° without an anti-aliased seam.
+    const [sx0, sy0] = toScreen(view, x0, y1), [sx1, sy1] = toScreen(view, x1, y0);
+    const dx = Math.round(sx0), dy = Math.round(sy0);
+    ctx.drawImage(img, (x0 - b[0]) * kx, (b[3] - y1) * ky, (x1 - x0) * kx, (y1 - y0) * ky, dx, dy, Math.round(sx1) - dx, Math.round(sy1) - dy);
   }
 
   function text(s: string, x: number, y: number, color = FG, align: CanvasTextAlign = 'left') {
@@ -537,7 +558,7 @@ export function mountMap(el: HTMLElement, opts: {
     ctx.imageSmoothingQuality = 'high';
 
     const base = images[baseId()], b = baseBounds();
-    if (base) drawGeo(base, base.naturalWidth, base.naturalHeight, b);
+    if (base) for (const ib of mode === 'polar' ? [b] : wrapCopies(bounds.global_hillshade)) drawGeo(base, base.naturalWidth, base.naturalHeight, ib);
     if (mode === 'polar') {
       const sb = bounds.shackleton_hillshade;
       if (detailVisible(view, sb)) {
@@ -570,11 +591,18 @@ export function mountMap(el: HTMLElement, opts: {
       const [x, y] = toScreen(view, ...llToMap(mode, m.lat, m.lon));
       return { x: x - 10, y: y - 20, w: 28, h: 30 };
     });
+    // Chrome floating over the canvas (toolbar, zoom, layers, readout, the app's hint): labels under it are unreadable.
+    const cr = canvas.getBoundingClientRect(), chrome: Rect[] = [];
+    for (const e of [...root.querySelectorAll('.lmap-bar .lmap-seg, .lmap-foot > *'), ...(opts.covers?.() ?? [])]) {
+      const r = e.getBoundingClientRect();
+      if (r.width && r.height) chrome.push({ x: r.left - cr.left - 4, y: r.top - cr.top - 4, w: r.width + 8, h: r.height + 8 });
+    }
     for (const p of [...pts].sort((a, c) => +(c.s === hoverSite) - +(a.s === hoverSite))) {
       const w = ctx.measureText(p.s.name).width;
-      const right = p.x + 9 + w < view.w - 4;
-      const r: Rect = { x: right ? p.x + 7 : p.x - 9 - w, y: p.y - 8, w: w + 4, h: 16 };
-      if (p.s !== hoverSite && placed.some((o) => rectsOverlap(o, r))) continue;
+      const sides = p.x + 9 + w < view.w - 4 ? [p.x + 7, p.x - 9 - w] : [p.x - 9 - w]; // right of the dot, else left
+      const r = sides.map((x): Rect => ({ x, y: p.y - 8, w: w + 4, h: 16 }))
+        .find((r) => !chrome.some((o) => rectsOverlap(o, r)) && (p.s === hoverSite || !placed.some((o) => rectsOverlap(o, r))));
+      if (!r) continue;
       placed.push(r);
       text(p.s.name, r.x + 2, p.y, p.s === hoverSite ? FG : '#c9c8c4');
     }
@@ -777,6 +805,15 @@ export function mountMap(el: HTMLElement, opts: {
     else if (b.dataset.zoom) zoomBy(b.dataset.zoom === 'in' ? 1.5 : 1 / 1.5);
   }, on);
 
+  if (opts.start) {
+    const s = opts.start;
+    setMode(s.mode); setOverlay(s.overlay);
+    if (s.center) whenLaidOut(() => {
+      const [cx, cy] = llToMap(mode, ...s.center!);
+      setView({ ...view, cx, cy, scale: s.kmAcross ? view.w / (s.kmAcross / kmPerUnit()) : view.scale });
+    });
+  }
+
   const ro = new ResizeObserver(layout);
   ro.observe(canvas);
 
@@ -793,7 +830,7 @@ export function mountMap(el: HTMLElement, opts: {
       const b = bounds.sp_hillshade ?? baseBounds();
       const polar = points.every(([la, lo]) => la < -80 && inBounds(b, ...spFwd(la, lo)));
       setMode(polar ? 'polar' : 'global');
-      // ponytail: global fit ignores the 0/360 seam; points either side of 0° lon fit the long way round.
+      // ponytail: global fit ignores the ±180° seam (far side); points either side of it fit the long way round.
       return whenLaidOut(() => setView({ ...view, ...fitPoints(points.map(([la, lo]) => llToMap(mode, la, lo)), view.w, view.h, polar ? 3000 : 2) }));
     },
     frame(lat, lon, km) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { spFwd } from '../core/geom';
 import {
-  clampView, detailVisible, feather, fitPoints, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
+  clampView, detailVisible, GLOBAL_VIEW, wrapCopies, feather, fitPoints, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
   matchStats, niceScaleKm, quantiles, rampLut, rectsOverlap, slopeDeg, stopsLut, tileBounds, toMap, toScreen, zoomAt, type Bounds, type View,
 } from './map';
 
@@ -70,14 +70,22 @@ describe('coordinate conversion', () => {
     expect(lon180(23.473)).toBeCloseTo(23.473, 9);
   });
 
-  it('global view: lon 0..360 left to right, output lon in -180..180', () => {
+  it('global view: lon -180..180 left to right (near side centred), output lon in -180..180', () => {
     expect(llToMap('global', 0.6741, 23.473)[0]).toBeCloseTo(23.473, 9);
-    expect(llToMap('global', -41.6385, -153.9852)[0]).toBeCloseTo(206.0148, 9);
-    expect(mapToLl('global', 206.0148, -41.6385)[1]).toBeCloseTo(-153.9852, 9);
+    expect(llToMap('global', -41.6385, -153.9852)[0]).toBeCloseTo(-153.9852, 9);
+    expect(llToMap('global', 0, 336.5)[0]).toBeCloseTo(-23.5, 9);               // 0..360 input is accepted
+    expect(mapToLl('global', -153.9852, -41.6385)[1]).toBeCloseTo(-153.9852, 9);
     expect(mapToLl('global', 90, 10)).toEqual([10, 90]);
-    const v: View = { cx: 180, cy: 0, scale: 2, w: 720, h: 360 };
-    expect(toScreen(v, ...llToMap('global', 90, 0))).toEqual([0, 0]);          // top-left = 90N, 0E
-    expect(toScreen(v, ...llToMap('global', -90, -0.0001))[1]).toBe(360);
+    const v: View = { cx: 0, cy: 0, scale: 2, w: 720, h: 360 };
+    expect(toScreen(v, ...llToMap('global', 0.6741, 23.473))[0]).toBeCloseTo(360 + 2 * 23.473, 6); // Apollo 11 near the middle
+    expect(toScreen(v, ...llToMap('global', 90, -180))).toEqual([0, 0]);          // top-left = 90N, 180°
+    expect(toScreen(v, ...llToMap('global', -90, 179.9999))[1]).toBe(360);
+    expect(clampView(v, GLOBAL_VIEW)).toEqual(v);
+  });
+
+  it('global image (0..360) is drawn as copies covering -180..180', () => {
+    expect(wrapCopies([0, -90, 360, 90])).toEqual([[-360, -90, 0, 90], [0, -90, 360, 90]]);
+    expect(wrapCopies([-180, -90, 180, 90])).toEqual([[-180, -90, 180, 90]]);
   });
 
   it('polar view: 0° up, 90°E right, pole at origin', () => {

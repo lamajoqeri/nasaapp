@@ -198,6 +198,7 @@ export function metricsTable(sc: Pick<Scenario, 'rows' | 'cmp' | 'srows' | 'slip
   }).join('') + '</tbody>';
 }
 
+const RANK: Record<string, number> = { no: 0, marginal: 1, gaps: 1, ok: 2 };
 const VERDICT_CLASS: Record<string, string> = { ok: 'ok', marginal: 'warn', gaps: 'warn', no: 'no' };
 const commsBasis = (v: CommsVerdict) => (v.basis === 'dsn' ? 'Deep Space Network contact' : 'Earth in view, no station data for these dates');
 
@@ -348,6 +349,11 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     $('#v-comms').innerHTML = v
       ? `${dot(v.comms.level)}<b>${v.comms.label}</b><small>${esc(v.comms.detail)}${v.comms.basis === 'earth' ? ' · Earth in view' : ''}</small>`
       : '<b class="na">–</b><small>&nbsp;</small>';
+    // Landing delayed: the same verdicts for the delayed landing, under each (pending while it computes).
+    const slip = d.slip(), sc = list[sel], sv = slip && sc?.slipped ? verdictsOf(sc.slipped) : null;
+    if (v && slip) for (const k of ['power', 'comms'] as const) {
+      $(`#v-${k}`).insertAdjacentHTML('beforeend', `<small class="v-slip">+${slip} d: ${sv ? `${dot(sv[k].level)} <span class="${RANK[sv[k].level] > RANK[v[k].level] ? 'good' : RANK[sv[k].level] < RANK[v[k].level] ? 'bad' : ''}">${sv[k].label}</span>` : sc?.slipError ? 'n/a' : '…'}</small>`);
+    }
     $('#v-all').innerHTML = all.map((x, i) => {
       const text = esc(verdictSummary(LETTERS[i], x));
       return `<span class="va${i === sel ? ' on' : ''}" role="img" title="${text}" aria-label="${text}"><b style="color:${SCENARIO_COLORS[i]}">${LETTERS[i]}</b>${x ? dot(x.power.level) + dot(x.comms.level) : '<i class="vd na"></i><i class="vd na"></i>'}</span>`;

@@ -8,6 +8,7 @@ import { mountMap, type MapHandle } from './map';
 import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
 import { compareTable } from './compare';
+import { okLatLon, readStageHash, writeStageHash, type MapView } from './hash';
 import { inspectorState, mountInspector, readHash as readInspectorHash, writeHash as writeInspectorHash, type InspectorHandle } from './inspector';
 import { mountSky, readHash as readSkyHash, skyState, writeHash as writeSkyHash } from './sky';
 import { register, run, schema, setSnapshot, snapshot, actions, toolName, tools, utcTime } from './actions';
@@ -34,6 +35,7 @@ const ICON = {
   play: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 1.2v9.6L10.5 6z" fill="currentColor"/></svg>',
   pause: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 1.5h2.6v9H2.5zM6.9 1.5h2.6v9H6.9z" fill="currentColor"/></svg>',
   close: '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+  trash: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M1.5 3h9M4.5 3V1.5h3V3M2.8 3l.6 7.5h5.2l.6-7.5M5 5v4M7 5v4" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>',
   plus: '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M5 1v8M1 5h8" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
 };
 
@@ -97,7 +99,6 @@ function makeCard(sc: Scenario): HTMLElement {
         <span class="badge" aria-hidden="true"></span>
         <span class="card-title"><span class="name"></span><span class="when"></span></span>
       </div>
-      <button class="rm icon" type="button">${ICON.close}</button>
     </div>
     <dl class="kpis">${kpi('lit', 'Sunlit')}${kpi('earth', 'Earth in view')}${kpi('dark', 'Longest dark')}</dl>
     <p class="card-status" role="status"></p>
@@ -118,6 +119,7 @@ function makeCard(sc: Scenario): HTMLElement {
         <div class="seg steps" role="group" aria-label="Distance per move">${NUDGES.map((m) => `<button type="button" data-step="${m}">${m} m</button>`).join('')}</div>
       </div>
       <p class="note"></p>
+      <button class="rm" type="button">${ICON.trash}<span>Remove scenario</span></button>
     </div></div>`;
 
   const site = $<HTMLSelectElement>('.site', el);
@@ -139,9 +141,17 @@ function makeCard(sc: Scenario): HTMLElement {
       .catch((e) => { sc.error = BAD_COORD; paintCard(sc); console.warn(e); });
   };
   const date = $<HTMLInputElement>('.date', el);
-  date.onchange = () => {
-    if (date.value) ui('scenario.update', { id: id(), t: date.value + 'Z' });
+  let dateTimer = 0;
+  /** A complete date the user means: Chrome reports each keystroke of the year (0002, 0020, 0202, 2027). */
+  const typed = () => { const t = Date.parse(date.value + 'Z'); return Number.isNaN(t) || new Date(t).getUTCFullYear() < 1900 ? null : t; };
+  const commitDate = () => {
+    clearTimeout(dateTimer);
+    const t = typed();
+    if (t !== null && isoMin(t) !== isoMin(sc.spec.t)) ui('scenario.update', { id: id(), t: date.value + 'Z' });
   };
+  date.oninput = date.onchange = () => { clearTimeout(dateTimer); if (typed() !== null) dateTimer = window.setTimeout(commitDate, 800); };
+  date.onkeydown = (e) => { if (e.key === 'Enter') commitDate(); };
+  date.onblur = () => { commitDate(); if (typed() === null) date.value = isoMin(sc.spec.t); };
   const mast = $<HTMLSelectElement>('.mast', el);
   mast.onchange = () => ui('scenario.update', { id: id(), mast: +mast.value });
   $('.rm', el).onclick = () => ui('scenario.remove', { id: id() });
@@ -181,7 +191,7 @@ function syncCard(sc: Scenario) {
   head.setAttribute('aria-label', `Scenario ${L}: ${nameOf(sc)}, landing ${whenOf(sc)} UTC${on ? ', selected' : ''}`);
   const rm = $<HTMLButtonElement>('.rm', el);
   rm.disabled = scs.length <= 1;
-  rm.setAttribute('aria-label', `Remove scenario ${L}`); rm.title = 'Remove scenario';
+  rm.setAttribute('aria-label', `Remove scenario ${L}`); rm.title = scs.length <= 1 ? 'The last scenario cannot be removed' : `Remove scenario ${L}`;
   const name = $('.name', el);
   name.textContent = nameOf(sc); name.classList.toggle('mono', !rec);
   $('.when', el).innerHTML = `${whenOf(sc)} <i>UTC</i>`;
@@ -219,10 +229,13 @@ function paintChip(sc: Scenario) {
   el.classList.toggle('busy', sc.busy);
   el.classList.toggle('err', !!sc.error);
   el.setAttribute('aria-pressed', String(on));
+  el.title = `${nameOf(sc)}, landing ${whenOf(sc)} UTC`;
+  const d = (k: 'lit' | 'earth' | 'dark') => { const x = slipDelta(sc, k); return `<b class="${x.cls}">${x.text || '='}</b>`; };
   el.setAttribute('aria-label', `Scenario ${L}: ${nameOf(sc)}, landing ${whenOf(sc)} UTC. Sunlit ${v('lit')}, Earth in view ${v('earth')}, longest dark ${v('dark')}. ${on ? 'Selected. ' : ''}Opens the editor.`);
   el.innerHTML = `<span class="badge${on ? ' on' : ''}" aria-hidden="true">${L}</span><span class="chip-name${recOf(sc) ? '' : ' mono'}">${esc(nameOf(sc))}</span>
     <span class="chip-when">${whenOf(sc).slice(0, 10)}</span>
-    <span class="chip-kpi"><b class="sun" title="Sunlit, share of the 29.5 days">${v('lit')}</b><b class="earth" title="Earth in view">${v('earth')}</b><span title="Longest dark">${sc.error ? 'no result' : `☾ ${v('dark')}`}</span></span>`;
+    <span class="chip-kpi"><b class="sun" title="Sunlit, share of the 29.5 days">${v('lit')}</b><b class="earth" title="Earth in view">${v('earth')}</b><span title="Longest dark">${sc.error ? 'no result' : `☾ ${v('dark')}`}</span></span>${slip && sc.rows ? `
+    <span class="chip-d" title="Change if the landing is delayed by ${slip} d">+${slip} d: ${d('lit')}${d('earth')}${d('dark')}</span>` : ''}`;
 }
 
 /** Push results into the card's headline numbers and status line. */
@@ -242,9 +255,13 @@ function paintCard(sc: Scenario) {
     $('.sd', box).textContent = k === 'lit' ? r.sd.replace(' ± ', '±') : '';
     const d = $('.d', box);
     if (!slip) { d.textContent = ''; d.className = 'd'; continue; }
-    const x = sc.cmp && sc.srows ? (k === 'earth' ? pctDelta : delta)(pick(sc.cmp, k), pick(sc.srows, k)) : { text: sc.slipError ? 'n/a' : '…', cls: 'pending' };
+    const x = slipDelta(sc, k);
     d.textContent = x.text; d.className = `d ${x.cls}`;
   }
+}
+/** Change of a headline number if the landing slips, as on the card and the chip. */
+function slipDelta(sc: Scenario, k: 'lit' | 'earth' | 'dark') {
+  return sc.cmp && sc.srows ? (k === 'earth' ? pctDelta : delta)(pick(sc.cmp, k), pick(sc.srows, k)) : { text: sc.slipError ? 'n/a' : '…', cls: 'pending' };
 }
 
 /** Spec changed: refresh controls, recompute, update the URL and the stage. */
@@ -252,7 +269,7 @@ function changed(sc: Scenario) {
   syncCard(sc);
   track(sc, sc.compute());
   saveHash();
-  if (sc === cur()) { paintHead(); stagePolicy(); }
+  if (sc === cur()) { paintHead(); stagePolicy(); paintNow(); }
   syncStage();
 }
 
@@ -276,7 +293,7 @@ function select(i: number) {
   if (i === sel && cards.get(scs[i])?.classList.contains('sel')) return;
   sel = i;
   for (const s of scs) syncCard(s);
-  paintInspector(); queueLanes(); stagePolicy(); syncStage(); saveHash();
+  paintInspector(); queueLanes(); stagePolicy(); syncStage(); saveHash(); paintNow();
   if (mode === 'map') map?.focus(cur().spec.lat, cur().spec.lon);
   if (cmpOpen) paintCompare();
 }
@@ -321,6 +338,7 @@ function afterCount() {
 function setEditor(open: boolean, focus = false) {
   editorOpen = open;
   $('#editor').hidden = !open;
+  if (open && matchMedia('(max-width: 1099px)').matches) $('#editor').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // stacked layout: it opens below the fold
   if (open && focus) $('#editor-close').focus({ preventScroll: true });
   else if ($('#editor').contains(document.activeElement)) chips.get(cur())?.focus();
 }
@@ -409,14 +427,23 @@ function paintNote() {
   if (!sc) return;
   const inside = inTile(sc.spec.lat, sc.spec.lon);
   let text = '';
-  if (mode === 'map') text = autoMap && !inside
+  if (flash) text = flash;
+  else if (mode === 'map') text = autoMap && !inside
     ? '3D terrain covers Shackleton, de Gerlache Rim, Haworth, Malapert Massif and Mons Mouton / Nobile Rim. Showing the map for this site.'
-    : `Click the map to place scenario ${LETTERS[sel]}.`;
+    : err3d ? `${err3d} Showing the map. Click it to place scenario ${LETTERS[sel]}.` : `Click the map to place scenario ${LETTERS[sel]}.`;
   else if (err3d) text = err3d;
   else if (!inside) text = `Scenario ${LETTERS[sel]} is outside the 3D regions, so it has no pin here. The lighting is for its date.`;
   else if (rangeOf(sc.spec.t) !== ranges[0]) text = '3D lighting covers 2024 to 2040, so it cannot show this date.';
   n.textContent = text;
-  n.classList.toggle('err', mode === '3d' && !!err3d);
+  n.classList.toggle('err', !flash && !!err3d);
+}
+let flash = '', flashTimer = 0;
+/** A message on the stage for a few seconds, e.g. that a date was moved into the computable range. */
+function flashNote(text: string) {
+  flash = text;
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => { flash = ''; paintNote(); }, 7000);
+  paintNote();
 }
 
 function setMode(m: Mode, user = true) {
@@ -438,8 +465,10 @@ function showStage() {
         dataBase, sites,
         onPick: (lat, lon, id) => { if (cur()) ui('scenario.update', id ? { id: LETTERS[sel], site: id } : { id: LETTERS[sel], lat, lon }); },
         onBar: (c) => ui('view.set', { region: keyOf(MAP_REGION, c.mode), overlay: keyOf(MAP_OVERLAY, c.overlay) }),
+        start: mapStart, onView: saveHash,
+        covers: () => [...document.querySelectorAll('.stage-switch, #stage-note')],
       });
-      map.focus(cur().spec.lat, cur().spec.lon);
+      if (!mapStart?.center) map.focus(cur().spec.lat, cur().spec.lon);
     }
   } else if (!view3d && !loading3d) {
     loading3d = true;
@@ -450,14 +479,18 @@ function showStage() {
         dataBase, startZoom: 0.62, region: regionOf(cur().spec.lat, cur().spec.lon),
         onPick: (lat, lon) => { if (cur()) ui('scenario.update', { id: LETTERS[sel], lat, lon }); },
         onReady: () => { stage.classList.remove('loading'); syncStage(); },
-        onError: () => stage.classList.remove('loading'), // the module shows its own message
+        onError: (msg) => { // e.g. no WebGL2: the module shows its message; the map works without it
+          stage.classList.remove('loading');
+          err3d = msg;
+          if (mode === '3d') setMode('map', false); else paintNote();
+        },
       });
       if (import.meta.env.DEV) (window as unknown as { __view3d?: View3DHandle }).__view3d = view3d; // self-check hooks, dev server only
       syncStage();
     }).catch((e) => {
       stage.classList.remove('loading'); loading3d = false;
       err3d = `The 3D view could not start: ${(e as Error).message}.`;
-      paintNote();
+      if (mode === '3d') setMode('map', false); else paintNote();
     });
   }
   syncStage();
@@ -493,16 +526,22 @@ function paintCompare() {
 function setCompare(open: boolean, focus = false) {
   cmpOpen = open;
   const sheet = $('#sheet'), btn = $('#cmp');
+  const inside = sheet.contains(document.activeElement); // before inert drops the focus to <body>
   sheet.classList.toggle('open', open);
   sheet.toggleAttribute('inert', !open);
+  for (const e of document.querySelectorAll('.stage, .insp')) e.toggleAttribute('inert', open); // hidden behind the sheet
   btn.setAttribute('aria-pressed', String(open));
   if (open) { paintCompare(); if (focus) $('#cmp-close').focus({ preventScroll: true }); }
-  else if (sheet.contains(document.activeElement)) btn.focus();
+  else if (inside || (focus && document.activeElement === document.body)) btn.focus();
   saveHash();
 }
 
 /* ------------------------------------------------------------------ URL hash
-   #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&rm=clear&cmp=1&v=evidence */
+   #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&rm=clear&cmp=1&v=evidence
+   &cam=site:B&ov=<layer>&mr=g&mc=lat,lon,km (see hash.ts) */
+
+/** Map view from the link, used when the map is first shown (and kept in the URL until then). */
+let mapStart: MapView | undefined;
 
 let hashTimer = 0;
 /** Coalesced: actions call this freely (a scrub drag fires one per pointer move, and browsers rate-limit replaceState). */
@@ -523,6 +562,8 @@ function writeHash() {
   if (view3dState().renderMode === 'clear') p.set('rm', 'clear');
   if (cmpOpen) p.set('cmp', '1');
   if (view !== 'mission') p.set('v', view);
+  const ms = map?.state();
+  writeStageHash(p, { cam: view3dState().camera, map: ms ? { ...ms, kmAcross: ms.kmAcross || undefined } : mapStart });
   writeInspectorHash(p); writeSkyHash(p);
   history.replaceState(null, '', '#' + p.toString());
 }
@@ -537,13 +578,16 @@ function loadHash(): Spec[] {
   cmpOpen = p.get('cmp') === '1';
   readInspectorHash(p); readSkyHash(p);
   if (p.get('rm') === 'clear') void run('render.set', { mode: 'clear' }); // applied when the 3D view mounts
+  const st = readStageHash(p);
+  if (st.cam) void run('camera.set', { preset: st.cam.preset, ...(st.cam.scenario ? { scenario: st.cam.scenario } : {}) }); // likewise
+  mapStart = st.map;
   const specs: Spec[] = [];
   for (const c of p.getAll('c').slice(0, MAX)) {
     const [key, d, m] = c.split('~');
     const rec = sites.find((s) => s.id === key);
     const [lat, lon] = rec ? [rec.lat, rec.lon] : (key ?? '').split(',').map(Number);
     const t = Date.parse((d ?? '') + 'Z');
-    if (!(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 360)) continue;
+    if (!okLatLon(lat, lon)) continue;
     specs.push({ site: rec ? rec.id : 'custom', lat, lon, t: clampT(Number.isNaN(t) ? DEFAULT_T : t), mast: MASTS.includes(+m) ? +m : 2 });
   }
   return specs;
@@ -598,7 +642,14 @@ function siteOf(q: string): SiteRec {
   if (!s) throw new Error(`Unknown site "${q}". Use ${toolName('sites.search')} to find a catalogue id, or give lat and lon.`);
   return s;
 }
-const timeOf = (s: string) => clampT(utcTime(s));
+function timeOf(s: string): number {
+  const t = utcTime(s), c = clampT(t);
+  if (Math.abs(c - t) >= 60e3) {
+    const day = (x: number) => isoMin(x).slice(0, 10);
+    flashNote(`Landing moved to ${day(c)}: the app can compute landings ${ranges.map((r) => `${day(r.t0)} to ${day(r.t1 - WIN)}`).join(' or ')}.`);
+  }
+  return c;
+}
 
 interface SpecArgs { site?: string; lat?: number; lon?: number; t?: string; mast?: number }
 /** `spec` with the given fields replaced. A site sets the position; lat/lon make it a custom point. Throws on bad input. */
@@ -608,7 +659,7 @@ function patch(spec: Spec, a: SpecArgs): Spec {
   if (a.site != null && a.site !== 'custom') { const s = siteOf(a.site); out.site = s.id; out.lat = s.lat; out.lon = s.lon; }
   else if (a.lat != null || a.lon != null) {
     const lat = a.lat ?? spec.lat, lon = a.lon ?? spec.lon;
-    if (!(Math.abs(lat) <= 90) || !(lon >= -180 && lon <= 360)) throw new Error(BAD_COORD);
+    if (!okLatLon(lat, lon)) throw new Error(BAD_COORD);
     out.site = 'custom'; out.lat = +lat.toFixed(5); out.lon = +lon.toFixed(5);
   }
   if (a.t != null) out.t = timeOf(a.t);
@@ -1120,7 +1171,12 @@ export async function start(root: HTMLElement) {
 
   // chrome
   const toggleCompare = () => ui('tab.set', { tab: cmpOpen ? 'mission' : 'compare' });
-  $('#add').onclick = () => ui('scenario.add');
+  $('#add').onclick = () => { // a new scenario at the next catalogue site in the 3D regions not in use yet, not on top of the selected one
+    const used = new Set(scs.map((s) => s.spec.site)), pole = sites.filter((s) => s.lat < -80 && inTile(s.lat, s.lon));
+    const i = pole.findIndex((s) => s.id === cur().spec.site);
+    const next = [...pole.slice(i + 1), ...pole.slice(0, i + 1)].find((s) => !used.has(s.id));
+    ui('scenario.add', next ? { site: next.id } : {});
+  };
   $('#editor-close').onclick = () => ui('scenario.select', { id: LETTERS[sel], editor: false });
   document.addEventListener('pointerdown', (e) => { // a click elsewhere in the rail closes the pop-over (the stage stays usable with it open)
     const t = e.target as HTMLElement;
@@ -1130,6 +1186,13 @@ export async function start(root: HTMLElement) {
   for (const b of document.querySelectorAll<HTMLElement>('.stage-switch [data-mode]')) b.onclick = () => ui('view.set', { mode: b.dataset.mode });
   $('#cmp').onclick = toggleCompare;
   $('#cmp-close').onclick = toggleCompare;
+  $('#sheet').addEventListener('keydown', (e) => { // Tab stays in the open sheet (Esc or × closes it)
+    if (e.key !== 'Tab') return;
+    const f = [...$('#sheet').querySelectorAll<HTMLElement>('button, a[href], input, select, [tabindex]:not([tabindex="-1"])')].filter((x) => x.offsetParent);
+    const first = f[0], last = f[f.length - 1];
+    if (!first) return;
+    if (e.shiftKey ? document.activeElement === first : document.activeElement === last) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  });
   mountAgent($('#agent'), { sites });
   const copy = $('#copy');
   let copyTimer = 0;
