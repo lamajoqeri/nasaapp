@@ -140,6 +140,8 @@ uniform float uExposure, uAmbient;
 uniform vec3 uEarth;        // unit, towards Earth
 uniform float uEarthshine;  // 0 when Earth is below the local horizon
 uniform float uPix;         // radians per CSS pixel (not per buffer pixel: the texture must not change with resolution)
+uniform float uClear;       // 0 = realistic, 1 = "Clear" relief-map rendering
+uniform vec3 uHill;         // Clear: fixed hillshade light (unit, Moon-fixed, 45 deg above the region's horizontal)
 
 float hash21(vec2 p) {
   p = fract(p * vec2(0.1031, 0.1030));
@@ -187,6 +189,19 @@ vec4 shade(vec2 xy) {         // xy: relative map coords
   vec3 tx = normalize(vec3(0.0, 1.0, 0.0) - n * n.y), ty = normalize(vec3(1.0, 0.0, 0.0) - n * n.x); // ground directions of map x, y
   if (m != vec2(0.0)) ns = normalize(n - 0.05 * (m.x * tx + m.y * ty));
   float ce = max(dot(ns, v), 0.0);
+  if (uClear > 0.5) {
+    // "Clear" mode: a relief map with the real shadows drawn on it. The warm / cool split is the same
+    // ray-marched visible-Sun fraction as in the realistic mode (so the shadow edge and penumbra are
+    // identical); only the colours differ. Shadow is lifted to a cool blue-grey, sunlit ground is warm,
+    // and both carry hillshading from a fixed light plus a constant sky term, so relief reads everywhere.
+    float sun = ci > 0.0 ? sunFraction(P) * smoothstep(0.0, 0.03, ci) : 0.0;
+    float hs = dot(ns, uHill) - 0.70711;        // 0 on level ground
+    float relief = clamp(0.60 + 2.3 * hs, 0.04, 1.15);
+    vec3 cool = vec3(0.072, 0.102, 0.168) * (0.28 + 1.5 * relief);
+    // Sunlit slopes mostly face the Sun, often away from the hillshade light: shade them more gently so they stay bright.
+    vec3 warm = vec3(1.000, 0.915, 0.775) * (0.22 + 0.74 * mix(0.80, relief, 0.55)) * (0.90 + 0.10 * smoothstep(0.0, 0.35, ci));
+    return vec4(pow(mix(cool, warm, sun), vec3(1.0 / 2.2)), 1.0);
+  }
   float lit = 0.0;
   if (ci > 0.0) {                               // geometric normal decides; the march never sees the micro-relief
     lit = sunFraction(P) * mix(ci, 2.0 * ci / (ci + max(ce, 0.12)), 0.5);  // Lambert / Lommel-Seeliger (emission floored: no blown-out limb in site view)

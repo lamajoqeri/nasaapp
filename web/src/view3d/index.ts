@@ -8,10 +8,13 @@ import { azel, DEG, enu, R, spFwd, spInv, unit, type V3 } from '../core/geom';
 import { demMax, EARTH_RADIUS_DEG, SUN_RADIUS_DEG, sunFractionAt } from './march';
 import { BLOCK_HI, BLOCK_LO, BLOCK_MID, DEPTH_FRAG, GBUF_FRAG, PROBE_FRAG, RESOLVE_FRAG, SCREEN_VERT, TERRAIN_FRAG, TERRAIN_VERT } from './shaders';
 import { regionTiles } from './regions';
+import { run } from '../ui/actions';
+import { bindView3D, wantedRenderMode, type CameraState, type RenderMode } from './actions';
 import './view3d.css';
 
 export { sunFractionAt } from './march';
 export { regionAt, regionTiles } from './regions';
+export type { RenderMode } from './actions';
 
 export interface View3DSite { lat: number; lon: number; mast: number; label: string }
 export interface View3DHandle {
@@ -23,6 +26,13 @@ export interface View3DHandle {
   setRegion(tileId: string): Promise<void>;
   /** Id of the region shown, or being loaded. */
   region(): string;
+  /** 'realistic' (Sun only, black shadows) or 'clear' (relief-map colours over the same shadows). Cheap: a uniform. */
+  setRenderMode(mode: RenderMode): void;
+  renderMode(): RenderMode;
+  /** Camera as shown: preset and, when standing at a site, that scenario's label. */
+  cameraState(): CameraState;
+  /** The sites passed to setSites, in order, and whether each lies in the region shown. */
+  siteStates(): { label: string; inRegion: boolean }[];
 }
 export interface View3DOptions {
   dataBase: string;
@@ -32,6 +42,8 @@ export interface View3DOptions {
   startZoom?: number;
   /** Region to start in (default shackleton_20m). */
   region?: string;
+  /** Render mode to start in (default: the last one requested through the `render.set` action, else realistic). */
+  renderMode?: RenderMode;
   /** Overview: the user clicked (not dragged) the terrain of the shown region at this surface point. */
   onPick?(lat: number, lon: number): void;
 }
@@ -135,7 +147,11 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       <button type="button" data-mode="site" aria-pressed="false">Stand at site</button>
       <span class="sep"></span><span class="v3-sites" style="display:contents"></span>
       <span class="sep v3-site-only"></span><button type="button" class="v3-site-only" data-follow aria-pressed="true" title="Keep the camera aimed at the Sun's azimuth as time changes">Follow Sun</button>
+      <span class="sep"></span>
+      <button type="button" data-render="realistic" aria-pressed="true" title="Lit only by the Sun; shadows are black">Realistic</button>
+      <button type="button" data-render="clear" aria-pressed="false" title="Relief-map colours: sunlit warm, shadow cool, same shadows">Clear</button>
     </div>
+    <div class="v3-legend" hidden><span><i class="lit"></i>sunlit</span><span><i class="shade"></i>in shadow</span></div>
     <canvas class="v3-az" hidden aria-hidden="true"></canvas>
     <div class="v3-readout" hidden></div>
     <div class="v3-dir sun" hidden><i></i><span>Sun</span></div>
@@ -154,6 +170,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
   let mode: 'orbit' | 'site' = 'orbit';
   let siteIdx = 0;
   let follow = true;
+  let renderMode: RenderMode = opts.renderMode ?? wantedRenderMode();
   let live: Live | undefined; // everything that exists only after the data is loaded
   let want = opts.region ?? DEFAULT_REGION, shown = '', ready = false;
   const cleanup: (() => void)[] = [];
@@ -183,18 +200,22 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     }));
     ui.querySelectorAll<HTMLElement>('.v3-site-only').forEach((e) => { e.hidden = eff !== 'site'; });
     followBtn.setAttribute('aria-pressed', String(follow));
+    ui.querySelectorAll<HTMLElement>('button[data-render]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.render === renderMode)));
+    q('.v3-legend').hidden = renderMode !== 'clear' || !ready;
   };
   ui.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('button');
     if (!b || b.disabled) return;
+    // Render mode and camera go through the action layer: the same path the AI agent uses.
     if (b.dataset.follow !== undefined) { follow = !follow; syncUi(); live?.cameraChanged(); }
-    else if (b.dataset.site) handle.setCamera('site', +b.dataset.site);
-    else if (b.dataset.mode === 'site') handle.setCamera('site', standable(siteIdx) ? siteIdx : sites.findIndex((_, i) => standable(i)));
-    else handle.setCamera('orbit');
+    else if (b.dataset.render) void run('render.set', { mode: b.dataset.render });
+    else if (b.dataset.site) void run('camera.set', { preset: 'stand-at-site', scenario: sites[+b.dataset.site].label });
+    else if (b.dataset.mode === 'site') void run('camera.set', { preset: 'stand-at-site' });
+    else void run('camera.set', { preset: 'overview' });
   });
 
   interface Live {
-    timeChanged(): void; sitesChanged(): void; cameraChanged(): void; resize(): void;
+    timeChanged(): void; sitesChanged(): void; cameraChanged(): void; resize(): void; renderModeChanged(): void;
     hasSite(i: number): boolean; applyRegion(hi: Tile): void;
     debug: View3DDebugHandle['debug'];
   }
@@ -231,7 +252,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       shown = id;
       msg.textContent = '';
       syncUi();
-      if (!ready) { ready = true; ui.hidden = false; readout.hidden = false; opts.onReady?.(); }
+      if (!ready) { ready = true; ui.hidden = false; readout.hidden = false; syncUi(); bindView3D(handle); opts.onReady?.(); }
     } catch (e) {
       if (id === want) { want = shown; msg.textContent = ''; } // keep showing the old region
       throw e;
@@ -266,9 +287,14 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       return chain;
     },
     region: () => want,
+    setRenderMode(m) { if (m === renderMode) return; renderMode = m; syncUi(); live?.renderModeChanged(); },
+    renderMode: () => renderMode,
+    cameraState: () => (mode === 'site' && standable(siteIdx) ? { preset: 'stand-at-site', scenario: sites[siteIdx].label } : { preset: 'overview', scenario: null }),
+    siteStates: () => sites.map((s, i) => ({ label: s.label, inRegion: standable(i) })),
     destroy() {
       if (dead) return;
       dead = true;
+      if (ready) bindView3D(undefined);
       cleanup.splice(0).reverse().forEach((f) => f());
       live = undefined;
       root.remove();
@@ -365,6 +391,7 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
     const shadeUniforms = {
       ...shared, uCam: { value: camS }, uExposure: { value: 1.7 }, uAmbient: { value: 0.015 },
       uEarth: { value: earthDir }, uEarthshine: { value: 0 }, uPix: { value: 1e-3 },
+      uClear: { value: renderMode === 'clear' ? 1 : 0 }, uHill: { value: new THREE.Vector3(0, 0, -1) },
     };
     // Deferred when float render targets exist (practically always): meshes write (x, y, depth), one
     // full-screen pass marches once per pixel. Otherwise forward, with a depth pre-pass against overdraw.
@@ -468,6 +495,11 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       shared.uC.value.set(centre[0], centre[1], centre[2]);
       shared.uCk.value.set((cLen - R) * (cLen + R), cLen, cLen - centre[2], h0);
       shared.uXY0.value.set(xy0[0], xy0[1]);
+      // Clear mode's hillshade light: 45 deg up, from the upper left of the default overview. Fixed to the
+      // ground (Moon-fixed), so the relief does not swim when the camera orbits.
+      const up = v3(unit(lat0, lon0)), from = new THREE.Vector3(0.99, 0.14, 0); // grid (dx, dy) = (0.14, 0.99) -> (dy, dx, 0)
+      from.addScaledVector(up, -up.dot(from)).normalize();
+      shadeUniforms.uHill.value.copy(from).add(up).normalize();
       for (const [list, geo] of [[hiMeshes, hiGeo], [loMeshes, loGeo]] as const) for (const m of list) m.geometry = geo;
       return {
         hi, dem, xy0, lat0, lon0, h0, centre, pos, up0: v3(unit(lat0, lon0)), hiGrid, loGrid, inHi,
@@ -926,8 +958,9 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       for (const t of regions) t.data = undefined;
     });
 
+    const renderModeChanged = () => { shadeUniforms.uClear.value = renderMode === 'clear' ? 1 : 0; requestRender(); };
     resize();
-    return { timeChanged, sitesChanged, cameraChanged, resize, applyRegion, hasSite: (i) => !!siteGeo[i], debug };
+    return { timeChanged, sitesChanged, cameraChanged, resize, renderModeChanged, applyRegion, hasSite: (i) => !!siteGeo[i], debug };
   }
 
   syncUi();

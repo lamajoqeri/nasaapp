@@ -284,3 +284,107 @@ table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
   * { transition: none !important; }
   .stage-load::after { animation: none; width: 100%; opacity: .4; }
 }
+
+/* ==== inspector v2 (Effort 2): chart, windows bar, verdicts, Details, sky pop-up. Owned by ui/inspector.ts and ui/sky.ts ==== */
+.insp .pane-head .badge { background: var(--bg); color: var(--fg); border-color: var(--sc, var(--line-strong)); }
+.sec-head.mid { align-items: center; margin-bottom: 6px; }
+.sec-head.mid h3 { margin-bottom: 0; }
+.sec-head.wrap { flex-wrap: wrap; row-gap: 0; }
+.sec-head.wrap h3 { flex: 1 0 100%; }
+button.mini { height: 22px; padding: 0 8px 0 6px; display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+button.mini:hover:not(:disabled) { color: var(--fg); }
+
+.chart-ctl { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.seg.nums button { font-family: var(--mono); font-size: 11.5px; padding: 0 7px; word-spacing: -0.3em; }
+#c-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-legend { flex: none; display: flex; gap: 10px; font: 600 11px/16px var(--mono); color: var(--muted); }
+.c-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.c-legend span.on { color: var(--fg); }
+.c-legend i { width: 10px; height: 2px; }
+.c-read { display: flex; align-items: center; gap: 12px; min-height: 18px; font: 11.5px/18px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.c-read .rt { color: var(--muted); min-width: 11ch; word-spacing: -0.3em; }
+.c-read .rv { display: inline-flex; align-items: center; gap: 5px; min-width: 6ch; }
+.c-read .rv i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
+.c-read .rv b { font-weight: 400; }
+#c-read { margin-bottom: 4px; }
+#w-read { margin-top: 4px; word-spacing: -0.2em; text-overflow: ellipsis; display: block; }
+#w-read.quiet { color: var(--faint); font-family: var(--sans); word-spacing: 0; }
+canvas.chart { height: 156px; }
+canvas.chart, canvas.wins { border: 1px solid var(--line); cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+#c-note { margin-top: 6px; min-height: 69px; } /* four lines for either metric: switching never moves what is below */
+.c-legend .dash { font-weight: 400; word-spacing: -0.3em; }
+.c-legend .dash i { height: 0; width: 14px; border-top: 1px dashed; background: none; }
+.w-legend { display: flex; gap: 12px; margin-bottom: 6px; font-size: 11.5px; line-height: 16px; color: var(--muted); white-space: nowrap; }
+.w-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw.dsn { background: #b9d5fb; }
+
+.verdicts { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); }
+.verdicts > div { padding: 6px 8px 7px; min-width: 0; }
+.verdicts > div + div { border-left: 1px solid var(--line); }
+.verdicts dt { font-size: 10px; line-height: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+.verdicts dd { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 7px; }
+.verdicts dd b { font-size: 15px; line-height: 22px; font-weight: 600; }
+.verdicts dd b.na { grid-column: 1 / -1; color: var(--muted); font-weight: 400; }
+.verdicts dd small { grid-column: 1 / -1; font: 11.5px/16px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-spacing: -0.3em; }
+/* verdict marks: colour and shape both carry the level (circle OK, diamond marginal or gaps, square no) */
+.vd { flex: none; display: inline-block; width: 8px; height: 8px; }
+.vd.ok { background: var(--good); border-radius: 50%; }
+.vd.warn { background: var(--sun); transform: rotate(45deg) scale(.86); }
+.vd.no { background: var(--bad); }
+.vd.na { border: 1px solid var(--line-strong); border-radius: 50%; }
+.v-all { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 8px 0; }
+.v-key { font-size: 11px; line-height: 16px; color: var(--faint); }
+#v-all { display: flex; gap: 14px; margin-left: auto; }
+.va { display: inline-flex; align-items: center; gap: 5px; font: 600 11px/16px var(--mono); cursor: help; }
+.va b { margin-right: 1px; }
+.va.on b { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+button.disclose { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; }
+.disclose .quiet { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--faint); }
+.disclose .chev { flex: none; color: var(--muted); transition: transform .12s; }
+.disclose[aria-expanded=true] .chev { transform: rotate(90deg); }
+.more { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.insp.empty :is(.verdicts, .v-all) { opacity: .6; }
+
+/* sky pop-up */
+dialog.sky { padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg); color: var(--fg); max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: hidden; }
+dialog.sky[open] { display: flex; flex-direction: column; }
+.sky-head, .sky-time { flex: none; }
+dialog.sky::backdrop { background: rgba(4, 5, 6, .74); }
+.sky-head { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--line); }
+.sky-title { min-width: 0; margin-right: auto; }
+.sky-title h2 { font-size: 14px; line-height: 18px; font-weight: 600; }
+.sky-title p { font: 11.5px/16px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sky-main { display: grid; grid-template-columns: auto 252px; min-height: 0; overflow: auto; }
+.sky-plot { width: min(72vh, 640px); aspect-ratio: 1; }
+.sky-plot canvas { width: 100%; height: 100%; }
+.sky-info { min-width: 0; border-left: 1px solid var(--line); padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
+.sky-info dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 2px 0; }
+.sky-info dt { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sky-info dd { font: 12.5px/18px var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.sky-info .grp { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.sky-info .grp:first-child { margin-top: 0; border-top: 0; }
+.sky-info .grp dt { display: inline-flex; align-items: center; gap: 6px; color: var(--fg); font-weight: 600; }
+.sky-info .grp dd { font-family: var(--sans); color: var(--muted); }
+.sky-info .wide { flex-direction: column; gap: 0; }
+.sky-info .wide dd { text-align: left; font-size: 12px; }
+.sky-key { list-style: none; margin: 0; padding: 10px 0 0; border-top: 1px solid var(--line); display: grid; gap: 3px; font-size: 11.5px; line-height: 16px; color: var(--muted); }
+.sky-key li { display: flex; align-items: center; gap: 8px; }
+.sky-key .ln { flex: none; width: 18px; height: 0; border-top: 2px solid var(--muted); }
+.sky-key .ln.dash { border-top: 1px dashed var(--muted); }
+.sky-key .ln.tick { height: 9px; border-top: 0; border-left: 1px solid var(--sun); margin-left: 8px; width: 10px; }
+.sky-key .ln.land { height: 8px; border-top: 1px solid #6b717b; background: #1c2026; }
+.sky-time { display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px 10px; border-top: 1px solid var(--line); }
+.sky-time .play { width: 30px; height: 30px; }
+.sky-time input { flex: 1; }
+.sky-time output { flex: none; min-width: 39ch; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; word-spacing: -0.2em; }
+@media (max-width: 940px) {
+  .sky-main { grid-template-columns: minmax(0, 1fr); }
+  .sky-plot { width: min(64vh, 100vw - 18px); margin: 0 auto; }
+  .sky-info { border-left: 0; border-top: 1px solid var(--line); }
+  .sky-head { flex-wrap: wrap; gap: 8px; }
+  .sky-title { flex: 1 1 60%; }
+  .sky-head .seg { order: 3; }
+  .sky-time { flex-wrap: wrap; gap: 4px 12px; }
+  .sky-time output { flex: 1 1 100%; order: 3; min-width: 0; text-align: left; font-size: 11.5px; }
+}

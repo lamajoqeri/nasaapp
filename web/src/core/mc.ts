@@ -6,6 +6,8 @@ export const SMOOTH_DEG = 45;
 
 export interface Uncertainty {
   pLit: Float32Array;                            // P(sunFrac > 0) per series sample
+  fracLo: Float32Array;                          // 10th percentile of the visible Sun fraction per sample, over the draws
+  fracHi: Float32Array;                          // 90th percentile
   mean: Record<keyof Metrics, number>;
   std: Record<keyof Metrics, number>;
 }
@@ -35,6 +37,7 @@ export function monteCarlo(s: Series, hor: Horizon, earthMargin = 0, draws = 64,
   const acc = keys.map(() => [] as number[]);
   const g = new Float32Array(naz), el = new Float32Array(naz);
   const sf = new Float32Array(n), ev = new Uint8Array(n);
+  const all = new Float32Array(draws * n); // every draw's sunFrac, for the per-sample percentiles
 
   for (let d = 0; d < draws; d++) {
     for (let i = 0; i < naz; i++) g[i] = gauss();
@@ -48,6 +51,7 @@ export function monteCarlo(s: Series, hor: Horizon, earthMargin = 0, draws = 64,
       ev[i] = s.earthEl[i] - horizonAt(el, s.earthAz[i]) > earthMargin ? 1 : 0;
       if (sf[i] > 0) pLit[i] += 1 / draws;
     }
+    all.set(sf, d * n);
     const m = metrics(s, sf, ev);
     keys.forEach((key, j) => acc[j].push(m[key] === null ? NaN : Number(m[key])));
   }
@@ -58,5 +62,17 @@ export function monteCarlo(s: Series, hor: Horizon, earthMargin = 0, draws = 64,
     mean[key] = v.length ? mu : NaN;
     std[key] = v.length ? Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length) : NaN;
   });
-  return { pLit, mean, std };
+  const fracLo = new Float32Array(n), fracHi = new Float32Array(n), col = new Float32Array(draws);
+  for (let i = 0; i < n; i++) {
+    for (let d = 0; d < draws; d++) col[d] = all[d * n + i];
+    col.sort();
+    fracLo[i] = quantile(col, 0.1); fracHi[i] = quantile(col, 0.9);
+  }
+  return { pLit, fracLo, fracHi, mean, std };
+}
+
+/** Quantile of an ascending array, linear between ranks. */
+export function quantile(sorted: ArrayLike<number>, q: number): number {
+  const x = q * (sorted.length - 1), i = Math.floor(x), f = x - i;
+  return i + 1 < sorted.length ? sorted[i] * (1 - f) + sorted[i + 1] * f : sorted[sorted.length - 1];
 }

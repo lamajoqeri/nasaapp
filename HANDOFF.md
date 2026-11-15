@@ -194,3 +194,20 @@ New, all optional to use:
 - `main` was rebuilt around a full-screen 3D cockpit (web/src/ui/app.ts, scenario.ts, timeline.ts, compare.ts, map.ts, evidence.ts, web/src/view3d/). The earlier column UI, `web-map`, `web-proof`, `web-comms` and the first `web-3d` implementation were merged for history but their files are superseded by the cockpit versions. Do not build on the old files; pull `main` first.
 - Commit history on `main` was rewritten once (16:05) to drop co-author trailers. If you have a local clone from before that: `git fetch origin && git checkout main && git reset --hard origin/main` (after saving any unpushed work on a branch and rebasing it onto the new main).
 - GitHub Pages: the deploy workflow builds and tests fine but cannot publish until a repo admin enables Pages (Settings > Pages > Source: GitHub Actions).
+
+## v2, Effort 2 status (Sat 19:00 PST) — done on `main`
+
+Implemented from `docs/V2-DESIGN.md` sections 3, 4, 5:
+- **Inspector** (`web/src/ui/inspector.ts`, `charts.ts`): Power / Sun-elevation chart (all scenarios overlaid, 10-90% band, 7 / 14 / 29.5 d), windows bar (sunlit, Earth in view, DSN contact), viability badges with thresholds printed, Details (raw table + 12-month strip), Sky button.
+- **Sky pop-up** (`web/src/ui/sky.ts`): all-sky view with "Horizon zoom" and "True sky" scales, tracks, true-size disks clipped by terrain, tied to the scrubber.
+- **3D render modes** (`web/src/view3d/`): Realistic | Clear toggle, stored in the URL as `rm=clear`.
+- **Actions registered** (via `register()` in `web/src/ui/actions.ts`): `inspector.details`, `sky.open`, `sky.close`, `chart.set`, `render.set`, `camera.set`. Every control calls `run(name, args)`.
+
+For Effort 1:
+- `web/src/ui/actions.ts` on main is a minimal stand-in with the doc's `Action` / `actions` / `register` plus `run(name, args)`. Replace it with your full version; keep those four exports source-compatible.
+- State for your `snapshot()`: `inspectorState()` (ui/inspector.ts), `skyState()` (ui/sky.ts), `view3dState()` (view3d/actions.ts). All return plain JSON.
+- Scenario colours A-D are `SCENARIO_COLORS` in ui/charts.ts (`#e8e6e1`, `#ee5b33`, `#5fd0a6`, `#d868b4`); use them for the scenario chips.
+- Charts scrub time through the `time.set` action when it is registered, otherwise through the existing `setHours`.
+- `app.ts`: the inspector is now mounted from inspector.ts; `paintHead` / `paintInspector` / `paintStrip` / `paintNow` only delegate. The left panel code (`makeCard`, `syncCard`, `paintCard`, rail markup) was not touched.
+- URL hash params added: `cm` (chart metric), `cd` (duration), `det` (details), `sky`, `ss` (sky scale), `rm` (render mode).
+- Decisions on the doc's open questions: Q3 power = visible fraction of the Sun's disk (vertical Sun-tracking panel), default mission 14 d. Badges: Power OK if the battery never drops below 20%, Marginal if it dips but does not empty, No if it empties; Comms OK if the longest gap without contact is 24 h or less, Gaps if longer, No if none.

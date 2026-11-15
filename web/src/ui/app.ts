@@ -1,16 +1,18 @@
 // Shell: top bar, scenario rail, stage (3D / map), inspector, timeline dock, compare sheet, evidence page.
 import { core, type Range } from '../core/api';
-import { DSN_NAMES } from '../core/extra';
 import { DEG, enu, R } from '../core/geom';
-import { drawPanorama } from './panorama';
-import { drawStrip, stripSummary, stripTimeAt } from './strips';
-import { caption, coord, DAY, delta, dur, isoMin, pctDelta, pick, shortCaption, utc, type Row } from './format';
+import { stripTimeAt } from './strips';
+import { coord, DAY, delta, dur, isoMin, pctDelta, pick, shortCaption, utc, type Row } from './format';
 import { mountMap, type MapHandle } from './map';
 import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
 import { compareTable } from './compare';
+import { mountInspector, readHash as readInspectorHash, writeHash as writeInspectorHash, type InspectorHandle } from './inspector';
+import { mountSky, readHash as readSkyHash, writeHash as writeSkyHash } from './sky';
 import type { View3DHandle } from '../view3d';
 import { regionAt, type RegionTile } from '../view3d/regions';
+import { onView3dChange, view3dState } from '../view3d/actions'; // registers render.set / camera.set
+import { run } from './actions';
 
 interface SiteRec { id: string; name: string; lat: number; lon: number; program: string; date: string | null; note: string }
 type View = 'mission' | 'evidence';
@@ -40,7 +42,8 @@ const cards = new Map<Scenario, HTMLElement>();
 let sel = 0, slip = 0, hours = 0, playing = false, step = 100;
 let view: View = 'mission', mode: Mode = '3d', autoMap = false, forced3d = false, cmpOpen = false;
 let map: MapHandle | undefined, view3d: View3DHandle | undefined, loading3d = false, err3d = '', evidenceMounted = false;
-let plotW = 0, lastPano = -1, lanesQueued = false;
+let plotW = 0, lanesQueued = false;
+let insp: InspectorHandle | undefined; // right inspector: markup, charts and painting live in ui/inspector.ts
 let regionLoads = 0;
 let demTiles: RegionTile[] | undefined; // DEM manifest: the 3D view can show its 20 m south-polar tiles
 
@@ -282,78 +285,15 @@ function afterCount() {
 
 /* ------------------------------------------------------------------ inspector */
 
-function paintHead() {
-  const sc = cur();
-  $('#i-badge').textContent = LETTERS[sel];
-  const n = $('#i-name');
-  n.textContent = recOf(sc)?.name ?? 'Custom point';
-  $('#i-coord').textContent = coord(sc.spec.lat, sc.spec.lon, 4);
-}
+function paintHead() { insp?.paintHead(); }
+function paintInspector() { insp?.paint(); }
+function paintStrip() { insp?.paintStrip(); }
 
-function paintInspector() {
-  const sc = cur();
-  if (!sc) return;
-  paintHead();
-  const insp = $('.insp');
-  insp.classList.toggle('busy', sc.busy);
-  insp.classList.toggle('empty', !sc.base);
-  const st = $('#i-status');
-  st.textContent = sc.error || sc.slipError;
-  const b = sc.base;
-  if (!b || !sc.rows) { // first load: same layout as the result, so nothing jumps when it arrives
-    $('#i-cap').textContent = 'Computing the terrain horizon. The first polar site downloads about 20 MB of terrain.';
-    $('#i-table').innerHTML = '<thead><tr><th></th><th>At landing</th></tr></thead><tbody>'
-      + ['Sun elevation', 'Sun disk visible', 'Sunset in', 'Earthset in', 'Sunlit, 29.5 d', 'Longest dark', 'Earth in view', 'Deep Space Network', 'Battery']
-        .map((l) => `<tr><th scope="row">${l}</th><td>–</td></tr>`).join('') + '</tbody>';
-    return;
-  }
-  $('#i-cap').textContent = `At landing: ${caption(b.metrics)}`;
-  const TITLES: Partial<Record<Row['key'], string>> = {
-    dsn: 'Hours when Earth is in view from the site and the Moon is above 10° at Goldstone, Madrid or Canberra',
-    battery: '200 W Sun-tracking panel, constant 100 W load, 1.5 kWh of storage, starting full',
-  };
-  const head = `<thead><tr><th></th><th>At landing</th>${slip ? `<th>Delayed ${slip} d</th>` : ''}</tr></thead>`;
-  $('#i-table').innerHTML = head + '<tbody>' + sc.rows.map((r, i) => {
-    const d = sc.cmp && sc.srows ? delta(sc.cmp[i], sc.srows[i]) : null;
-    const cell = slip ? `<td class="d ${d?.cls ?? 'pending'}">${d ? esc(d.text) : sc.slipError ? 'n/a' : '…'}</td>` : '';
-    const t = TITLES[r.key];
-    return `<tr><th scope="row"${t ? ` title="${esc(t)}"` : ''}>${t ? `<span class="hint">${r.label}</span>` : r.label}</th><td>${esc(r.text)}${r.sd ? `<small>${esc(r.sd)}</small>` : ''}</td>${cell}</tr>`;
-  }).join('') + '</tbody>';
-  if (sc.strip) {
-    const y = stripSummary(sc.strip);
-    $('#i-year').textContent = `12 months from ${isoMin(sc.strip.t0).slice(0, 10)}`;
-    $('#i-ysum').textContent = `${Math.round(y.pctLit)}% sunlit · Earth in view ${Math.round(y.pctEarth)}% · longest dark ${dur(y.longestDarkHours)}`;
-  }
-  paintStrip();
-  lastPano = -1;
-  paintNow();
-}
-
-function paintStrip() {
-  const sc = cur();
-  if (sc?.strip) drawStrip($<HTMLCanvasElement>('#i-strip'), sc.strip, { markT: sc.spec.t, markT2: slip ? sc.spec.t + slip * DAY : undefined });
-}
-
-/** Scrubber position: panorama, readouts, clock. Canvas draw first, text writes after. No worker call. */
+/** Scrubber position: inspector (panorama, readouts, chart playheads), then the clock. No worker call. */
 function paintNow() {
   const sc = cur();
   if (!sc) return;
-  const b = sc.base, h = Math.round(hours);
-  if (b) {
-    const s = b.series, i = Math.min(h, s.t.length - 1);
-    if (i !== lastPano) {
-      lastPano = i;
-      drawPanorama($<HTMLCanvasElement>('#i-pano'), b, { idx: i });
-      const f = s.sunFrac[i], bits = b.mission.dsn[i], vis = !!s.earthVis[i];
-      $('#n-el').textContent = `${s.sunEl[i].toFixed(1)}°`;
-      $('#n-disk').textContent = `${f > 0 && f < 0.005 ? '<1' : Math.round(f * 100)}%`;
-      $('#n-plit').textContent = b.uncertainty ? `${Math.round(b.uncertainty.pLit[i] * 100)}%` : '–';
-      const e = $('#n-earth');
-      e.textContent = vis ? 'In view' : 'Hidden'; e.classList.toggle('on', vis);
-      $('#n-dsn').textContent = b.mission.commsHours === null ? 'no station data for this era' : !vis ? 'no link while Earth is hidden'
-        : bits ? `link via ${DSN_NAMES.filter((_, k) => bits & (1 << k)).join(' and ')}` : 'no station can see the Moon';
-    }
-  }
+  insp?.paintNow();
   $('#clock').textContent = utc(sc.spec.t + hours * 3600e3);
   $('#off').textContent = `landing + ${dur(hours)}`.replace('<1 h', '0 h');
 }
@@ -369,6 +309,7 @@ function queueLanes() {
     drawLanes(cv, scs.map((s) => ({ series: s.base?.series, ghost: slip ? s.slipped?.series : undefined })), slip > 0);
     plotW = cv.clientWidth;
     placeHead();
+    insp?.paintAll(); // the inspector's charts show every scenario, so they follow the lanes
     document.querySelectorAll<HTMLElement>('#lane-badges .badge').forEach((b, i) => b.classList.toggle('on', i === sel));
   });
 }
@@ -530,7 +471,7 @@ function setCompare(open: boolean) {
 }
 
 /* ------------------------------------------------------------------ URL hash
-   #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&cmp=1&v=evidence */
+   #c=<siteId|lat,lon>~<YYYY-MM-DDTHH:MM>~<mast>&c=...&slip=N&s=<selected>&h=<hours>&m=<3d|map>&rm=clear&cmp=1&v=evidence */
 
 function saveHash() {
   if (!scs.length) return;
@@ -541,10 +482,13 @@ function saveHash() {
   if (Math.round(hours)) p.set('h', String(Math.round(hours)));
   if (mode === 'map' && !autoMap) p.set('m', 'map');
   if (forced3d) p.set('m', '3d');
+  if (view3dState().renderMode === 'clear') p.set('rm', 'clear');
   if (cmpOpen) p.set('cmp', '1');
   if (view !== 'mission') p.set('v', view);
+  writeInspectorHash(p); writeSkyHash(p);
   history.replaceState(null, '', '#' + p.toString());
 }
+onView3dChange(saveHash); // 3D render mode lives in the URL
 function loadHash(): Spec[] {
   const p = new URLSearchParams(location.hash.slice(1));
   const int = (k: string, max: number) => Math.min(max, Math.max(0, Math.round(+(p.get(k) ?? 0)) || 0));
@@ -553,6 +497,8 @@ function loadHash(): Spec[] {
   mode = p.get('m') === 'map' ? 'map' : '3d';
   forced3d = p.get('m') === '3d';
   cmpOpen = p.get('cmp') === '1';
+  readInspectorHash(p); readSkyHash(p);
+  if (p.get('rm') === 'clear') void run('render.set', { mode: 'clear' }); // applied when the 3D view mounts
   const specs: Spec[] = [];
   for (const c of p.getAll('c').slice(0, MAX)) {
     const [key, d, m] = c.split('~');
@@ -633,34 +579,7 @@ export async function start(root: HTMLElement) {
       <i class="stage-load" aria-hidden="true"></i>
     </main>
 
-    <aside class="insp" aria-label="Selected scenario">
-      <div class="pane-head"><span id="i-badge" class="badge on"></span><h2 id="i-name"></h2><span id="i-coord" class="coord"></span></div>
-      <div class="insp-body">
-        <p id="i-status" class="i-status" role="status"></p>
-        <section>
-          <h3 class="lbl">Horizon seen from the site</h3>
-          <canvas id="i-pano" class="pano" role="img" aria-label="Horizon panorama: terrain silhouette with the paths of the Sun and Earth"></canvas>
-          <dl class="now">
-            <div><dt>Sun angle</dt><dd id="n-el">–</dd></div>
-            <div><dt>Disk visible</dt><dd id="n-disk">–</dd></div>
-            <div title="Share of terrain-model draws in which some of the Sun is visible"><dt>Chance lit</dt><dd id="n-plit">–</dd></div>
-            <div><dt>Earth</dt><dd id="n-earth">–</dd></div>
-            <div class="wide" title="NASA ground stations at Goldstone, Madrid and Canberra. A station counts when the Moon is more than 10° above its horizon."><dt>Deep Space Network</dt><dd id="n-dsn">–</dd></div>
-          </dl>
-        </section>
-        <p id="i-cap" class="cap"></p>
-        <table id="i-table" class="m"></table>
-        <section>
-          <div class="sec-head"><h3 class="lbl" id="i-year">12 months</h3><span class="lbl quiet">Click to set the landing date</span></div>
-          <canvas id="i-strip" class="strip" role="img" aria-label="Sunlight and Earth visibility over one year"></canvas>
-          <p id="i-ysum" class="ysum"></p>
-        </section>
-        <p class="foot">Figures cover the 29.5 days (one lunar day) after landing. ± is terrain-model uncertainty near the site, a lower bound.
-          Battery assumes a 200 W Sun-tracking panel, a constant 100 W load and 1.5 kWh of storage, starting full.
-          Deep Space Network contact needs Earth in view from the site and the Moon above 10° at Goldstone, Madrid or Canberra.
-          Dates from 2024 to 2040 are available, plus 1969 to 1972 for the Apollo landings.</p>
-      </div>
-    </aside>
+    <aside class="insp" aria-label="Selected scenario"></aside>
 
     <section id="sheet" class="sheet" role="dialog" aria-label="Compare scenarios" inert>
       <div class="sheet-head">
@@ -693,6 +612,14 @@ export async function start(root: HTMLElement) {
     <section class="evpage"><div id="evidence"></div></section>
     <p id="err" class="fatal" role="alert"></p>
   </div>`;
+
+  const inspDeps = {
+    scenarios: () => scs, selected: () => sel, slip: () => slip, hours: () => hours, playing: () => playing,
+    name: (sc: Scenario) => recOf(sc)?.name ?? 'Custom point',
+    setHours: (h: number) => { setHours(h); scrubAria(); }, setPlaying, select, save: saveHash,
+  };
+  insp = mountInspector($('.insp'), inspDeps);
+  mountSky(inspDeps);
 
   try {
     const [list, r, dem] = await Promise.all([
@@ -796,7 +723,7 @@ export async function start(root: HTMLElement) {
   if (cmpOpen) setCompare(true);
   void setView(view);
 
-  const ro = new ResizeObserver(() => { queueLanes(); lastPano = -1; paintNow(); paintStrip(); });
+  const ro = new ResizeObserver(() => { queueLanes(); insp?.resize(); });
   ro.observe(plot); ro.observe($('#i-pano'));
   addEventListener('hashchange', () => location.reload()); // pasted share link; replaceState doesn't fire this
 }
