@@ -942,7 +942,7 @@ function registerActions() {
         if (view !== 'mission') await setView('mission');
         if (cmpOpen !== (tab === 'compare')) setCompare(tab === 'compare', focus);
       }
-      return { tab: tabNow() };
+      return { summary: `Showing ${tabNow() === 'compare' ? 'the compare table' : tabNow() === 'evidence' ? 'the Evidence page' : 'the mission view'}`, tab: tabNow() };
     },
   });
   setSnapshot(appState);

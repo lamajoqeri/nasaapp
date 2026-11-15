@@ -121,7 +121,8 @@ define<{ scenario?: string; scale?: SkyMode }>({
     if (o.scale !== undefined) state.scale = o.scale as SkyMode;
     state.open = true;
     changed();
-    return skyState();
+    const s = skyState();
+    return { summary: `Opened the sky view for scenario ${s.scenario} (${s.scale === 'zoom' ? 'horizon zoom' : 'true sky'})`, ...s };
   },
 });
 
@@ -132,7 +133,7 @@ define<Record<string, never>>({
   async run(a) {
     args(a, 'sky.close', []);
     if (state.open) { state.open = false; changed(); }
-    return skyState();
+    return { summary: 'Closed the sky view', ...skyState() };
   },
 });
 

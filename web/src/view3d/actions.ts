@@ -110,7 +110,7 @@ register<{ mode: RenderMode }>({
     want.renderMode = mode as RenderMode;
     view?.setRenderMode(want.renderMode);
     changed();
-    return { mode: want.renderMode };
+    return { summary: `3D render mode: ${want.renderMode}`, mode: want.renderMode };
   },
 });
 
@@ -129,11 +129,12 @@ register<{ preset: CameraPreset; scenario?: string }>({
     if (!view) {
       want.camera = { preset, scenario: scenario ?? null };
       changed();
-      return { ...want.camera, pending: true };
+      return { summary: 'Camera request saved; it applies when the 3D view is shown', ...want.camera, pending: true };
     }
     const res = applyCamera(view, preset, scenario);
     if (!res.error) want.camera = { preset: res.preset, scenario: res.scenario };
     changed();
-    return res;
+    const summary = res.error ? 'Camera not moved' : res.preset === 'overview' ? 'Camera: overview' : `Camera: standing at scenario ${res.scenario}`;
+    return { summary, ...res };
   },
 });

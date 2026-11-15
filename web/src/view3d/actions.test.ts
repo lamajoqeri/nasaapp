@@ -41,9 +41,9 @@ describe('3D view actions', () => {
     let changes = 0;
     const off = onView3dChange(() => { changes++; });
     expect(view3dState()).toEqual({ mounted: false, region: null, renderMode: 'realistic', camera: { preset: 'overview', scenario: null } });
-    expect(await run('render.set', { mode: 'clear' })).toEqual({ mode: 'clear' });
+    expect(await run('render.set', { mode: 'clear' })).toMatchObject({ mode: 'clear' });
     expect(wantedRenderMode()).toBe('clear');
-    expect(await run('camera.set', { preset: 'stand-at-site', scenario: 'B' })).toEqual({ preset: 'stand-at-site', scenario: 'B', pending: true });
+    expect(await run('camera.set', { preset: 'stand-at-site', scenario: 'B' })).toMatchObject({ preset: 'stand-at-site', scenario: 'B', pending: true });
     expect(view3dState()).toEqual({ mounted: false, region: null, renderMode: 'clear', camera: { preset: 'stand-at-site', scenario: 'B' } });
     expect(changes).toBe(2);
 
@@ -53,11 +53,11 @@ describe('3D view actions', () => {
     expect(view3dState()).toEqual({ mounted: true, region: 'shackleton_20m', renderMode: 'clear', camera: { preset: 'stand-at-site', scenario: 'B' } });
     expect(JSON.parse(JSON.stringify(view3dState()))).toEqual(view3dState()); // plain JSON
 
-    expect(await run('render.set', { mode: 'realistic' })).toEqual({ mode: 'realistic' });
+    expect(await run('render.set', { mode: 'realistic' })).toMatchObject({ mode: 'realistic' });
     expect(view3dState().renderMode).toBe('realistic');
-    expect(await run('camera.set', { preset: 'overview' })).toEqual({ preset: 'overview', scenario: null });
-    expect(await run('camera.set', { preset: 'stand-at-site' })).toEqual({ preset: 'stand-at-site', scenario: 'A' }); // first in region
-    expect(await run('camera.set', { preset: 'stand-at-site', scenario: 'B' })).toEqual({ preset: 'stand-at-site', scenario: 'B' });
+    expect(await run('camera.set', { preset: 'overview' })).toMatchObject({ preset: 'overview', scenario: null });
+    expect(await run('camera.set', { preset: 'stand-at-site' })).toMatchObject({ preset: 'stand-at-site', scenario: 'A' }); // first in region
+    expect(await run('camera.set', { preset: 'stand-at-site', scenario: 'B' })).toMatchObject({ preset: 'stand-at-site', scenario: 'B' });
 
     // Outside the region: an error in the result, not a throw, and the camera stays put.
     const res = await run('camera.set', { preset: 'stand-at-site', scenario: 'C' }) as CameraState & { error?: string };

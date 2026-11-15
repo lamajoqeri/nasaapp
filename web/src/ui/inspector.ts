@@ -98,7 +98,7 @@ define<{ open: boolean }>({
     const a = only(args, 'inspector.details', ['open']);
     if (typeof a.open !== 'boolean') throw new Error('inspector.details: "open" must be true or false');
     if (a.open !== state.details) { state.details = a.open; changed(); }
-    return { detailsOpen: state.details };
+    return { summary: state.details ? 'Opened the Details section' : 'Closed the Details section', detailsOpen: state.details };
   },
 });
 
@@ -122,7 +122,7 @@ define<{ metric?: Metric; durationDays?: DurationDays }>({
     const metric = (a.metric as Metric | undefined) ?? state.metric, durationDays = (a.durationDays as DurationDays | undefined) ?? state.durationDays;
     if (metric !== state.metric || durationDays !== state.durationDays) { state.metric = metric; state.durationDays = durationDays; changed(); }
     const s = inspectorState();
-    return { ...s.chart, verdicts: s.verdicts };
+    return { summary: `Chart: ${s.chart.metric === 'power' ? 'solar power' : 'Sun elevation'} over ${s.chart.durationDays} days`, ...s.chart, verdicts: s.verdicts };
   },
 });
 

@@ -106,7 +106,7 @@ describe('sky actions', () => {
   it('open and close change skyState and return it', async () => {
     expect(skyState()).toMatchObject({ open: false, scenario: 'A', scale: 'zoom', scaleIsDefault: true });
     const r = await run('sky.open', {});
-    expect(r).toEqual(skyState());
+    expect(r).toMatchObject(skyState());
     expect(skyState().open).toBe(true);
     expect(JSON.parse(JSON.stringify(r))).toEqual(r);       // plain JSON
     await run('sky.close', {});

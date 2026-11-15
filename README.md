@@ -10,14 +10,31 @@ Built for the NASA Space Apps Challenge 2026, *Lunar Landing Site Navigator*.
 
 ## What is in the app
 
-- **3D terrain stage.** The south pole's candidate regions rendered in real 3D from 20 m LOLA terrain, with shadows traced toward the Sun through the terrain out to 300 km. Press play and the shadows sweep across a lunar day. "Stand at site" puts the camera on the mast with the Sun and Earth on the real horizon. The shader is checked against the horizon engine (agreement within 0.4% of the solar disk at the test site).
-- **Scenarios.** Up to four site-and-date combinations, A to D: any catalogue site (Artemis candidate regions, CLPS and other recent landers, Apollo) or any coordinate, picked from a list, typed, clicked on the map, or nudged 50 to 500 m at a time.
-- **Timeline.** One lane per scenario on a shared 29.5-day axis: sunlight above, Earth visibility below. Set a schedule slip of up to 60 days and each scenario is recomputed for the later date and drawn as a ghost lane, with every metric showing its change.
-- **Inspector.** Horizon panorama (terrain silhouette, Sun and Earth tracks), plain-language status, and metrics: time to sunset and Earthset, sunlit share, longest darkness, Earth in view, Deep Space Network contact, battery survival.
-- **Compare.** One table, scenarios side by side, best value marked in each row.
-- **Map.** South pole and whole-Moon maps with NASA's average sunlight and Earth-visibility overlays, for choosing where to look.
-- **Evidence.** Drag between a real LRO photo and our prediction for the same moment, plus every validation number below.
-- Scenarios, slip and view are stored in the URL, so a link reproduces the screen.
+- **3D terrain stage.** Five south-pole regions rendered in real 3D from 20 m LOLA terrain, with shadows traced toward the Sun through the terrain out to 300 km. Press play and the shadows sweep across a lunar day. Two render modes: Realistic (black shadows) and Clear (shadows lifted so relief stays readable). "Stand at site" puts the camera on the mast with the Sun and Earth on the real horizon. Click the terrain to place a site.
+- **Scenarios.** Up to four site-and-date combinations, A to D: any catalogue site (Artemis candidate regions, flown and planned CLPS landers, Chandrayaan-3, SLIM, Chang'e 3 to 6, Apollo 11 to 17) or any coordinate, picked from a list, typed, clicked on the map or the 3D terrain, or nudged 50 to 500 m at a time.
+- **Assistant.** A chat panel where Claude operates the app through the same controls a person uses: it can add and move scenarios, change dates, set a schedule slip, open the comparison and read the results back. It needs the user's own Anthropic API key, kept only in the browser. Everything else works without it.
+- **Timeline.** One lane per scenario on a shared 29.5-day axis: sunlight above, Earth visibility below. A schedule slip of up to 60 days recomputes every scenario for the later date and draws it as a ghost lane.
+- **Inspector.** Horizon panorama (terrain silhouette with Sun and Earth tracks); a chart of solar power or Sun elevation above the terrain for every scenario; a windows bar showing when each site is sunlit, has Earth in view, and has Deep Space Network contact; a Power and a Comms verdict with the thresholds stated; and the raw figures (time to sunset and Earthset, sunlit share, longest darkness, battery survival) behind a Details button.
+- **Sky view.** An all-sky chart from the site: the terrain as a band around the edge, the Sun's and Earth's paths over the mission, dashed where terrain hides them, with a "horizon zoom" scale because at the pole everything happens within a few degrees of the horizon.
+- **Compare.** One table, scenarios side by side, best value marked in each row, with the change under each value when a slip is set.
+- **Map.** South-pole and whole-Moon maps with shading layers for NASA's average sunlight and Earth visibility, elevation and slope.
+- **Evidence.** A plain-language explanation of why the south pole is hard, a draggable comparison of a real LRO photo against our prediction for the same moment, and every validation number below.
+- Scenarios, slip, view and chart settings are stored in the URL, so a link reproduces the screen.
+
+### How this answers the challenge
+
+| The brief asks for | Where it is |
+|---|---|
+| Curated sites (Apollo, CLPS, other programmes) and custom coordinates | Scenario editor, map, 3D click-to-place; 25 catalogue sites |
+| Side-by-side comparison of sites and dates | Up to four scenarios; timeline lanes, overlaid charts, Compare table |
+| Date and time flexibility; seasons | Landing date per scenario, 12-month strip, schedule-slip slider |
+| Sun and Earth relative to the horizon; time to sunset and Earthset | Horizon panorama, sky view, "Stand at site" 3D camera, status sentence and Details |
+| Solar elevation, duration of sunlight, Earth visibility windows; is it viable | Sun-elevation and power charts, windows bar, Power and Comms verdicts |
+| 2D maps and 3D surface | Map with shading layers; 3D terrain with traced shadows |
+| Animation over a lunar day | Play button drives shadows, panorama, sky view and playhead together |
+| Mission planners, educators and the public | Numbers with uncertainty and validation for planners; plain-language explainer, status sentences and the assistant for everyone else |
+| Real topography, no atmosphere, libration | LOLA terrain horizon with exact curvature and no refraction; Earth's libration comes from the JPL lunar orientation model |
+| Why small location or date changes matter | 100 m nudge buttons and the slip slider show it directly |
 
 ## How it works
 
@@ -29,7 +46,7 @@ LRO photos, NASA maps  -> validation files ->   visible Sun fraction, Earth visi
 ```
 
 1. **Terrain horizon.** From the site (plus mast height) we walk outward along 720 azimuths, sampling the elevation model, and keep the highest terrain angle in each direction. Geometry is done in 3D Moon-fixed coordinates, so lunar curvature and the "which way is north at the pole" problem are handled exactly.
-2. **Sun and Earth.** Positions come from a table computed with NAIF SPICE (DE440, lunar mean-Earth frame). The site's own position is subtracted, which matters for Earth (0.26 deg of parallax).
+2. **Sun and Earth.** Positions come from a table computed with NAIF SPICE (DE440, lunar mean-Earth frame), which includes the Moon's libration: this is what makes Earth rise and set at polar sites. The site's own position is subtracted, which matters for Earth (0.26 deg of parallax).
 3. **Power and comms.** The Sun is a disk, not a point: we report the visible fraction of the disk above the terrain. Earth counts as visible when its centre clears the terrain. Deep Space Network station visibility is layered on top.
 4. **Uncertainty.** The elevation model has errors. We perturb the horizon accordingly and report a spread on the results. The size and correlation of the perturbation are calibrated against NASA's own Monte-Carlo terrain realisations.
 

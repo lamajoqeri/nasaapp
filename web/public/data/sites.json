@@ -99,6 +99,33 @@
   "note": "Mare Crisium."
  },
  {
+  "id": "im3_reiner_gamma",
+  "name": "IM-3 (planned), Reiner Gamma",
+  "lat": 7.5,
+  "lon": -59.0,
+  "program": "CLPS (planned)",
+  "date": null,
+  "note": "Planned Intuitive Machines IM-3 target: the Reiner Gamma swirl. Approximate centre of the target area, not an official landing point."
+ },
+ {
+  "id": "schrodinger",
+  "name": "Schrodinger Basin (planned)",
+  "lat": -75.0,
+  "lon": 132.4,
+  "program": "CLPS (planned)",
+  "date": null,
+  "note": "Planned far-side CLPS target area. Approximate basin centre, not an official landing point. Earth is never visible, so a relay is needed."
+ },
+ {
+  "id": "lusee_night",
+  "name": "Blue Ghost M2 (planned), far side",
+  "lat": -23.8,
+  "lon": -177.7,
+  "program": "CLPS (planned)",
+  "date": null,
+  "note": "Planned far-side landing carrying the LuSEE-Night radio telescope. Approximate location, not an official landing point. Earth is never visible."
+ },
+ {
   "id": "slim",
   "name": "SLIM",
   "lat": -13.316,
