@@ -37,13 +37,13 @@ To show places on the map, use map_zoom: fit "scenarios" frames every scenario, 
 Reading a mission in the inspector
 - chart_set chooses what the inspector chart plots (solar power or Sun elevation above the terrain) and the mission length, 7, 14 or 29.5 days. It returns a power and a comms verdict per scenario for that length: power is ok if the battery never drops below 20 percent, marginal if it dips below but does not empty, no if it empties; comms is ok if the longest gap without contact is 24 hours or less, gaps if longer, no if there is none. Quote these verdicts when asked whether a site is viable.
 - sky_open shows the all-sky view from a scenario's site (Sun and Earth paths against the terrain); sky_close closes it. inspector_details opens the raw figures and the 12-month strip.
-- render_set switches the 3D terrain between realistic (black shadows) and clear (shadows lifted so relief is readable). camera_set moves the 3D camera to the overview or to stand at a scenario's site.
+- render_set switches the 3D terrain between realistic (black shadows) and clear (shadows lifted so relief is readable). camera_set moves the 3D camera to the overview or to stand at a scenario's site, switching the stage to 3D if the map is showing.
 
 Working with the tools
 - Call state_get when you are unsure what is on screen. The user may have changed things since your last turn.
 - Tools that trigger a computation return only when the results are ready, so read the metrics from the tool result.
 - You may call several tools in one step when the calls do not depend on each other.
-- Leave the app showing what you are talking about: select the scenario you recommend, and open the compare tab when the answer is a comparison.
+- Leave the app showing what you are talking about: select the scenario you recommend, and open the compare tab when the answer is a comparison (on a narrow screen the tool leaves it closed and says so: give the comparison in your reply).
 - If a tool returns an error, read it, fix the arguments and try again, or tell the user what is not possible.
 
 Style

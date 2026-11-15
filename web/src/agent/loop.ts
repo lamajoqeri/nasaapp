@@ -15,8 +15,9 @@ export interface LoopUI {
 
 /**
  * Sends `text` and runs until the model ends its turn. `history` is appended to in place and stays valid to resend.
- * On a refusal or an error the whole turn (from `text` on) is dropped, so it can't merge into the next message.
- * After a stop it is kept: it ends in the user's text or in tool results, and the next message joins that user turn.
+ * On a refusal the whole turn (from `text` on) is dropped, so it can't merge into the next message. So is a turn
+ * that fails before any tool ran. Once a tool has run the app has changed, so a failed turn is kept up to its last
+ * tool results: the model then still knows what it did. After a stop it is kept: it ends in the user's text or in tool results, and the next message joins that user turn.
  */
 export async function runTurn(client: Anthropic, system: string, history: Anthropic.MessageParam[], text: string, ui: LoopUI, signal: AbortSignal): Promise<void> {
   const mark = history.length;
@@ -24,7 +25,9 @@ export async function runTurn(client: Anthropic, system: string, history: Anthro
   try {
     if (!await turn(client, system, history, ui, signal)) history.length = mark;
   } catch (e) {
-    if (!signal.aborted) history.length = mark;
+    // Tool results are the only array-content user messages the loop adds, and it adds them after the tools ran.
+    const ranTools = history.slice(mark).some((m) => m.role === 'user' && Array.isArray(m.content));
+    if (!signal.aborted && !ranTools) history.length = mark;
     throw e;
   }
 }

@@ -10,10 +10,10 @@ export interface MapHandle {
   setMode(m: Mode): void; setOverlay(o: LayerId): void;
   state(): { mode: Mode; overlay: LayerId; center: [number, number]; kmAcross: number };
   /** Zoom and pan so every point is in view (picks the south-pole map when they all fit on it). */
-  fit(points: [number, number][]): void;
+  fit(points: [number, number][]): Promise<void>;
   /** Centre on lat/lon with `kmAcross` km across the viewport's width (either may be omitted). */
-  frame(lat?: number, lon?: number, kmAcross?: number): void;
-  zoomBy(f: number): void;
+  frame(lat?: number, lon?: number, kmAcross?: number): Promise<void>;
+  zoomBy(f: number): Promise<void>;
 }
 
 // ---------- pure helpers (unit-tested in map.test.ts) ----------
@@ -315,7 +315,11 @@ export function mountMap(el: HTMLElement, opts: {
   let view: View = { cx: 0, cy: 0, scale: 1, w: 0, h: 0 };
   const saved: Partial<Record<Mode, { cx: number; cy: number; scale: number }>> = {};
   let pending: (() => void) | null = null;  // view change requested before the first layout
-  const whenLaidOut = (f: () => void) => { if (view.w) f(); else pending = f; };
+  const laidOut: (() => void)[] = [];       // resolvers of the promises below, waiting for that layout
+  /** Runs `f` once the canvas has a size (now, if it has); a later request replaces a queued one. Resolves when the view is applied. */
+  const whenLaidOut = (f: () => void) => new Promise<void>((res) => {
+    if (view.w) { f(); res(); } else { pending = f; laidOut.push(res); }
+  });
   const KM_PER_DEG = 30.32; // lunar equator; the global map's x/y units are degrees
   const kmPerUnit = () => (mode === 'polar' ? 1e-3 : KM_PER_DEG);
   let markers: MapMarker[] = [];
@@ -437,7 +441,7 @@ export function mountMap(el: HTMLElement, opts: {
     canvas.width = Math.round(r.width * dpr);
     canvas.height = Math.round(r.height * dpr);
     view = { ...view, w: r.width, h: r.height };
-    if (pending) { const f = pending; pending = null; f(); }
+    if (pending) { const f = pending; pending = null; f(); for (const res of laidOut.splice(0)) res(); }
     else if (first) resetView();
     else setView(atFit ? { ...view, scale: minScale() } : view);
     drawNow();
@@ -782,19 +786,19 @@ export function mountMap(el: HTMLElement, opts: {
     state: () => ({ mode, overlay, center: mapToLl(mode, view.cx, view.cy), kmAcross: view.w ? (view.w / view.scale) * kmPerUnit() : 0 }),
     focus(lat, lon) {
       setMode(lat < -80 ? 'polar' : 'global');
-      whenLaidOut(() => applyFocus(lat, lon));
+      void whenLaidOut(() => applyFocus(lat, lon));
     },
     fit(points) {
-      if (!points.length) return;
+      if (!points.length) return Promise.resolve();
       const b = bounds.sp_hillshade ?? baseBounds();
       const polar = points.every(([la, lo]) => la < -80 && inBounds(b, ...spFwd(la, lo)));
       setMode(polar ? 'polar' : 'global');
       // ponytail: global fit ignores the 0/360 seam; points either side of 0° lon fit the long way round.
-      whenLaidOut(() => setView({ ...view, ...fitPoints(points.map(([la, lo]) => llToMap(mode, la, lo)), view.w, view.h, polar ? 3000 : 2) }));
+      return whenLaidOut(() => setView({ ...view, ...fitPoints(points.map(([la, lo]) => llToMap(mode, la, lo)), view.w, view.h, polar ? 3000 : 2) }));
     },
     frame(lat, lon, km) {
       if (lat != null && lon != null) setMode(lat < -80 ? 'polar' : 'global');
-      whenLaidOut(() => {
+      return whenLaidOut(() => {
         const [cx, cy] = lat != null && lon != null ? llToMap(mode, lat, lon) : [view.cx, view.cy];
         setView({ ...view, cx, cy, scale: km ? view.w / (km / kmPerUnit()) : view.scale });
       });

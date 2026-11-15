@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { actions, register, run, schema, setSnapshot, snapshot, tools } from './actions';
+import { actions, register, run, schema, setSnapshot, snapshot, tools, utcTime } from './actions';
 
 describe('action registry', () => {
   beforeEach(() => {
@@ -29,11 +29,23 @@ describe('action registry', () => {
     expect(() => register({ name: 'bad name', description: '', schema: schema(), run: async () => 0 })).toThrow();
   });
 
-  it('generates strict tool definitions', () => {
+  it('reports errors under the tool name', async () => {
+    register({ name: 'chart.set', description: '', schema: schema(), run: async () => { throw new Error('chart.set: bad; see scenario.nudge'); } });
+    await expect(run('chart.set')).rejects.toThrow('chart_set: bad; see scenario_nudge');
+  });
+
+  it('reads UTC times strictly', () => {
+    const t = Date.UTC(2027, 2, 2, 12);
+    for (const s of ['2027-03-02T12:00Z', '2027-03-02T12:00', '2027-03-02 12:00', '2027-03-02T14:00+02:00', ' 2027-03-02T12:00:00.000Z ']) expect(utcTime(s)).toBe(t);
+    expect(utcTime('2027-03-02')).toBe(Date.UTC(2027, 2, 2));
+    for (const s of ['March 2027', '03/02/2027', '2027', 'tomorrow', '']) expect(() => utcTime(s)).toThrow(/ISO 8601/);
+  });
+
+  it('generates tool definitions without strict mode', () => {
     const [t] = tools();
     expect(t.name).toBe('scenario_nudge');
     expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
-    expect(t.strict).toBe(true);
+    expect(t).not.toHaveProperty('strict'); // the API caps strict tools (20) and optional parameters (24) per request
     expect(t.input_schema.additionalProperties).toBe(false);
     expect(t.input_schema.required).toEqual(['id', 'dir', 'm']);
     expect(t.description).toBe('Move a scenario.');
