@@ -1,0 +1,8 @@
+/* Results sections (results.ts). Paper layout comes from report.css; this only adds what these tables need. */
+.report .r-tab th small, .report .r-tab td small { display: block; color: #6b7079; font-size: 12px; font-weight: 400; line-height: 1.35; }
+.report .r-best { font-weight: 700; }
+.report .r-ok { color: #1e7a46; }
+.report .r-warn { color: #9a6700; }
+.report .r-no { color: #b3261e; }
+.report .r-notes { padding-left: 1.4em; }
+.report .r-notes li { margin: 4px 0; }
