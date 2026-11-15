@@ -6,6 +6,7 @@ import { azel } from './geom';
 import { horizon } from './horizon';
 import { metrics, series } from './series';
 import { monteCarlo } from './mc';
+import { landingT } from '../ui/format';
 
 const DATA = new URL('../../public/data/', import.meta.url);
 const buf = async (p: string) => { const b = await readFile(new URL(p, DATA)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
@@ -101,5 +102,14 @@ describe('real site sanity', () => {
     console.log(`horizon ${ms.toFixed(0)} ms; lit ${m.pctLit.toFixed(1)}% earth ${m.pctEarth.toFixed(1)}% longest dark ${m.longestDarkHours} h; MC lit ${u.mean.pctLit.toFixed(1)}±${u.std.pctLit.toFixed(1)}`);
     expect(Math.max(...s.sunEl)).toBeLessThan(2.5);
     expect(m.pctAnyLit).toBeGreaterThan(60);
+  });
+});
+
+describe('catalogue landing times', () => {
+  it('Apollo 11: Sun at the sites.json touchdown time is ~10.7° (historical 10.8°)', async () => {
+    const a11 = (await json('sites.json')).find((s: { id: string }) => s.id === 'apollo11');
+    const eph = new Ephem(await json('ephem_apollo.json'), await buf('ephem_apollo.bin'));
+    const v = eph.at(landingT(a11.date));
+    expect(Math.abs(azel(a11.lat, a11.lon, 0, v[0], v[1], v[2]).el - 10.7)).toBeLessThan(0.1);
   });
 });

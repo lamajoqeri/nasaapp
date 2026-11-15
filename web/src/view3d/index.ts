@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Dem, type Tile } from '../core/dem';
 import { Ephem } from '../core/ephem';
+import type { Series } from '../core/series';
 import { azel, DEG, enu, R, spFwd, spInv, unit, type V3 } from '../core/geom';
 import { demMax, EARTH_RADIUS_DEG, SUN_RADIUS_DEG, sunFractionAt } from './march';
 import { BLOCK_HI, BLOCK_LO, BLOCK_MID, DEPTH_FRAG, GBUF_FRAG, PROBE_FRAG, RESOLVE_FRAG, SCREEN_VERT, TERRAIN_FRAG, TERRAIN_VERT, DETAIL, LITMAP_FRAG, EARTH_FRAG, GLARE_FRAG, SKY_VERT } from './shaders';
@@ -16,7 +17,11 @@ export { sunFractionAt } from './march';
 export { regionAt, regionTiles } from './regions';
 export type { RenderMode } from './actions';
 
-export interface View3DSite { lat: number; lon: number; mast: number; label: string }
+export interface View3DSite {
+  lat: number; lon: number; mast: number; label: string;
+  /** The scenario's computed series: the readout quotes it so it agrees with the inspector. */
+  series?: () => Pick<Series, 't' | 'stepMs' | 'sunFrac' | 'earthVis'> | undefined;
+}
 export interface View3DHandle {
   setTime(tMs: number): void;                 // UTC ms; clamps to the ephemeris range
   setSites(sites: View3DSite[]): void;        // scenario markers (label "A", "B", …)
@@ -832,12 +837,18 @@ export function mount3D(el: HTMLElement, opts: View3DOptions): View3DHandle {
       const iso = new Date(eph.clamp(tMs)).toISOString();
       const when = `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
       const sg = standing();
+      // The scenario's series sample at this hour (same rounding as the inspector), else none.
+      const at = (st: View3DSite) => {
+        const ser = st.series?.(), i = ser ? Math.round((eph.clamp(tMs) - ser.t[0]) / ser.stepMs) : -1;
+        return ser && i >= 0 && i < ser.t.length ? { sun: ser.sunFrac[i], earth: !!ser.earthVis[i] } : undefined;
+      };
       if (sg) {
         const s = azel(sg.s.lat, sg.s.lon, sg.h + sg.eyeH, v6[0], v6[1], v6[2]), e = azel(sg.s.lat, sg.s.lon, sg.h + sg.eyeH, v6[3], v6[4], v6[5]);
-        readout.innerHTML = `<b>Site ${esc(sg.s.label)}</b> · ${when} · <span class="sun">Sun</span> az ${deg(s.az)} el ${deg(s.el, 2)}, <b>${pct(sunFractionAt(r.dem, v6, sg.s.lat, sg.s.lon, sg.eyeH))}</b> of disk visible · <span class="earth">Earth</span> az ${deg(e.az)} el ${deg(e.el, 2)}`;
+        const x = at(sg.s);
+        readout.innerHTML = `<b>Site ${esc(sg.s.label)}</b> · ${when} · <span class="sun">Sun</span> az ${deg(s.az)} el ${deg(s.el, 2)}, <b>${pct(x ? x.sun : sunFractionAt(r.dem, v6, sg.s.lat, sg.s.lon, sg.eyeH))}</b> of disk visible · <span class="earth">Earth</span> az ${deg(e.az)} el ${deg(e.el, 2)}${x ? (x.earth ? ', in view' : ', hidden') : ''}`;
       } else {
         const s = azel(r.lat0, r.lon0, r.h0, v6[0], v6[1], v6[2]);
-        const per = siteGeo.flatMap((g) => (g ? [`${esc(g.s.label)} <b>${pct(sunFractionAt(r.dem, v6, g.s.lat, g.s.lon, g.s.mast))}</b>`] : [])).join(' · ');
+        const per = siteGeo.flatMap((g) => (g ? [`${esc(g.s.label)} <b>${pct(at(g.s)?.sun ?? sunFractionAt(r.dem, v6, g.s.lat, g.s.lon, g.s.mast))}</b>`] : [])).join(' · ');
         readout.innerHTML = `${when} · <span class="sun">Sun</span> el ${deg(s.el, 2)} at view centre${per ? ` · Sun disk visible from mast: ${per}` : ''}`;
       }
     }

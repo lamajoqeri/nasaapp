@@ -3,7 +3,7 @@
 import { core, type Range } from '../core/api';
 import { DEG, enu, R } from '../core/geom';
 import { stripTimeAt } from './strips';
-import { caption, coord, DAY, delta, dur, isoMin, pctDelta, pick, shortCaption, utc, type Row } from './format';
+import { caption, coord, DAY, delta, dur, isoMin, landingT, pctDelta, pick, shortCaption, utc, type Row } from './format';
 import { mountMap, type MapHandle } from './map';
 import { Scenario, type Spec } from './scenario';
 import { drawLanes, hourAt, lanesHeight, PITCH, STEPS, TOP, xAt } from './timeline';
@@ -198,11 +198,12 @@ function syncCard(sc: Scenario) {
     ? 'Custom point. Terrain here is 20 m where a detailed tile exists, 240 m otherwise.'
     : 'Custom point. Outside the south polar region terrain is coarse (about 4 km), so the horizon is smoother than reality.';
   if (rec?.date) {
-    const t = Date.parse(rec.date + 'T00:00:00Z');
-    const ok = ranges.some((x) => t >= x.t0 && t <= x.t1 - WIN);
+    const t = landingT(rec.date), when = rec.date.length > 10 ? utc(t) : rec.date;
+    const ok = ranges.some((x) => t >= x.t0 && t <= x.t1 - WIN), r = ranges.find((x) => t >= x.t0 && t <= x.t1);
     note += ok
-      ? ` Landed ${esc(rec.date)}. <button type="button" class="link" data-t="${t}">Use the landing date</button>`
-      : ` Landed ${esc(rec.date)}, outside the dates we can compute; shown at the date you pick.`;
+      ? ` Landed ${esc(when)}. <button type="button" class="link" data-t="${t}">Use the landing date</button>`
+      : r ? ` Landed ${esc(when)}; its 29.5-day window runs past our ${r === ranges[0] ? '' : 'Apollo '}data, ending ${isoMin(r.t1).slice(0, 10)}, so it is shown at the date you pick.`
+      : ` Landed ${esc(when)}, outside the dates we can compute; shown at the date you pick.`;
   }
   if (rangeOf(spec.t) !== ranges[0]) note += ' Apollo-era date: no Deep Space Network data.';
   $('.note', el).innerHTML = note;
@@ -267,6 +268,7 @@ function onUpdate(sc: Scenario) {
   queueLanes();
   if (sc === cur()) paintInspector();
   if (cmpOpen) paintCompare();
+  push3dTime(); // the 3D readout quotes the scenario's series
 }
 
 function select(i: number) {
@@ -474,7 +476,7 @@ function syncStage() {
     regionLoads++;
     view3d.setRegion(region).catch(() => {}).finally(() => { if (!--regionLoads) stage.classList.remove('loading'); }); // on failure the view keeps the old region
   }
-  view3d.setSites(scs.map((c, i) => ({ lat: c.spec.lat, lon: c.spec.lon, mast: c.spec.mast, label: LETTERS[i] })));
+  view3d.setSites(scs.map((c, i) => ({ lat: c.spec.lat, lon: c.spec.lon, mast: c.spec.mast, label: LETTERS[i], series: () => c.base?.series })));
   push3dTime();
 }
 

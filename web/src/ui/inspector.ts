@@ -181,7 +181,7 @@ const TABLE_TITLES: Partial<Record<Row['key'], string>> = {
   dsn: 'Hours when Earth is in view from the site and the Moon is above 10° at Goldstone, Madrid or Canberra',
   battery: '200 W Sun-tracking panel, constant 100 W load, 1.5 kWh of storage, starting full',
 };
-const EMPTY_ROWS = ['Sun elevation', 'Sun disk visible', 'Sunset in', 'Earthset in', 'Sunlit, 29.5 d', 'Longest dark', 'Earth in view', 'Deep Space Network', 'Battery', 'Permanent shadow'];
+const EMPTY_ROWS = ['Sun elevation (vs level)', 'Sun disk visible', 'Sunset in', 'Earthset in', 'Sunlit, 29.5 d', 'Longest dark', 'Earth in view', 'Deep Space Network, 29.5 d', 'Battery, 29.5 d', 'Permanent shadow'];
 
 /** The raw metrics table (today's rendering, unchanged): values at landing, plus the change if the landing is delayed. */
 export function metricsTable(sc: Pick<Scenario, 'rows' | 'cmp' | 'srows' | 'slipError'> | undefined, slip: number): string {
@@ -223,7 +223,7 @@ const MARKUP = `
         <button type="button" id="i-sky" class="mini" aria-haspopup="dialog" title="Open the all-sky view from this site">${ICON.sky}<span>Sky</span></button></div>
       <canvas id="i-pano" class="pano" role="img" aria-label="Horizon panorama: terrain silhouette with the paths of the Sun and Earth"></canvas>
       <dl class="now">
-        <div><dt>Sun angle</dt><dd id="n-el">–</dd></div>
+        <div title="Elevation of the Sun's centre above a level horizon. From a mast on high ground the real horizon can sit below level, so a Sun slightly below 0° can still be visible; terrain can also hide a Sun above 0°."><dt>Sun elevation (vs level)</dt><dd id="n-el">–</dd></div>
         <div><dt>Disk visible</dt><dd id="n-disk">–</dd></div>
         <div title="Share of terrain-model draws in which some of the Sun is visible"><dt>Chance lit</dt><dd id="n-plit">–</dd></div>
         <div><dt>Earth</dt><dd id="n-earth">–</dd></div>
@@ -424,7 +424,7 @@ export function mountInspector(el: HTMLElement, d: InspectorDeps): InspectorHand
     $('#i-status').textContent = sc.error || sc.slipError;
     const b = sc.base;
     $('#i-cap').textContent = b && sc.rows ? `At landing: ${caption(b.metrics)}`
-      : 'Computing the terrain horizon. The first polar site downloads about 20 MB of terrain.'; // same layout as the result, so nothing jumps when it arrives
+      : 'Computing the terrain horizon. The first polar site downloads about 50 MB of terrain and ephemeris data.'; // same layout as the result, so nothing jumps when it arrives
     $('#i-table').innerHTML = metricsTable(b ? sc : undefined, d.slip());
     if (b && sc.strip) {
       const y = stripSummary(sc.strip);

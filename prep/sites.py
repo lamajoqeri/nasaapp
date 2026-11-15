@@ -1,6 +1,6 @@
 """Move the polar 'representative point' sites to the best-lit pixel within 3 km, using PGDA's
 average Sun/Earth visibility maps (Mazarico et al. 2011). Tile centres are arbitrary and often sit
-on a slope facing away from Earth. Run once: .venv/bin/python prep/sites.py"""
+on a slope facing away from Earth. Also sets landing dates to full UTC touchdown times. Run once: .venv/bin/python prep/sites.py"""
 import json
 from pathlib import Path
 
@@ -11,7 +11,19 @@ from rasterio.windows import from_bounds
 from geom import DATA, sp_fwd, sp_inv
 
 ROOT = Path(__file__).resolve().parent.parent
+# Touchdown times, UTC (ISO 8601). The app uses them for "Use the landing date"; a bare date would mean 00:00 UTC,
+# which puts the Sun hours away from where it was (Apollo 11: 0.4 deg instead of 10.7 deg). IM-2 stays date-only:
+# its touchdown minute is not pinned down well enough here.
+TOUCHDOWN = {
+    "apollo11": "1969-07-20T20:17:40Z", "apollo12": "1969-11-19T06:54:35Z", "apollo14": "1971-02-05T09:18:11Z",
+    "apollo15": "1971-07-30T22:16:29Z", "apollo16": "1972-04-21T02:23:35Z", "apollo17": "1972-12-11T19:54:57Z",
+    "change3": "2013-12-14T13:11Z", "change4": "2019-01-03T02:26Z", "change5": "2020-12-01T15:11Z",
+    "change6": "2024-06-01T22:23Z", "chandrayaan3": "2023-08-23T12:33Z", "slim": "2024-01-19T15:20Z",
+    "im1": "2024-02-22T23:23Z", "blueghost1": "2025-03-02T08:34Z",
+}
 sites = json.loads((DATA / "sites.json").read_text())
+for site in sites:
+    site["date"] = TOUCHDOWN.get(site["id"], site["date"])
 with rasterio.open(ROOT / "data/AVGVISIB_85S_060M_201608.TIF") as s, \
         rasterio.open(ROOT / "data/AVGVISIB_85S_060M_201608_EARTH.TIF") as e:
     for site in sites:

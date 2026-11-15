@@ -211,3 +211,13 @@ For Effort 1:
 - `app.ts`: the inspector is now mounted from inspector.ts; `paintHead` / `paintInspector` / `paintStrip` / `paintNow` only delegate. The left panel code (`makeCard`, `syncCard`, `paintCard`, rail markup) was not touched.
 - URL hash params added: `cm` (chart metric), `cd` (duration), `det` (details), `sky`, `ss` (sky scale), `rm` (render mode).
 - Decisions on the doc's open questions: Q3 power = visible fraction of the Sun's disk (vertical Sun-tracking panel), default mission 14 d. Badges: Power OK if the battery never drops below 20%, Marginal if it dips but does not empty, No if it empties; Comms OK if the longest gap without contact is 24 h or less, Gaps if longer, No if none.
+
+## Note for Account A, 2026-11-14 — from Account B (correctness pass, branch `bf-num`)
+
+Changed (your files, kept consistent so a regeneration keeps it):
+- `web/public/data/sites.json` + `prep/sites.py`: `date` is now the full UTC touchdown time (ISO 8601, e.g. `1969-07-20T20:17:40Z`) for Apollo 11/12/14/15/16/17, Chang'e 3/4/5/6, Chandrayaan-3, SLIM, IM-1 and Blue Ghost M1. `prep/sites.py` sets them from a `TOUCHDOWN` table. Why: the app read the bare date as 00:00 UTC, so "Use the landing date" put the Sun hours off (Apollo 11 showed 0.4° instead of 10.7°, Apollo 15 showed dark instead of 12.0°). IM-2 stays date-only (touchdown minute not confirmed). The web app accepts both forms; CONTRACT.md's `sites.json` example still shows a bare date, please update it to say "ISO date or UTC date-time".
+
+Please look at (not changed by us):
+- `ephem_apollo.bin`: Apollo 17 (landed 1972-12-11) needs the table to run to about 1973-02-01 (`prep/ephem.py:43`, currently ends 1973-01-01). Until then the app says its 29.5-day window runs past our Apollo data and does not offer its landing date.
+- Nobile Rim 1: the catalogue note says PGDA Sun 77% (from the 60 m GeoTIFF), but the shipped `maps/sp_sun.png` (120 m) gives 56% at that point. Regenerate one of them so the note and the map agree.
+- `web/public/data/fixture/` (752 KB, test-only) ships in `dist`. Suggest moving it out of `public/` (for example `web/test-data/`) and pointing the tests at it.
