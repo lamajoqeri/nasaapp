@@ -31,7 +31,8 @@ describe('terrain helpers', () => {
     expect(pgdaAt(r, ...spInv(-50000, -50000))).toBeCloseTo(20);  // bottom left
     expect(pgdaAt(r, ...spInv(140000, 140000))).toBeNull();        // in the raster, beyond 150 km
     expect(pgdaAt(null, -89, 0)).toBeNull();
-    expect(pgdaAt(r, ...spInv(140000, 140000), Infinity)).toBeCloseTo(100); // the wide 75°S map has no disc limit
+    expect(pgdaAt(r, ...spInv(140000, 140000), Infinity)).toBeCloseTo(100); // the wide map has no disc
+    expect(pgdaAt(r, ...spInv(250000, 0), Infinity)).toBeNull();            // still null outside its raster
   });
 });
 

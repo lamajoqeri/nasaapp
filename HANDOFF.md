@@ -224,6 +224,6 @@ Please look at (not changed by us):
 
 ## Note for Account A, 2026-11-15 — from Account B (map layers cover the whole polar map)
 - Sunlight % and Earth view % only covered NASA's 85°S disc. NASA also publishes AVGVISIB_75S_120M (same product 69, same 0..25000 scale); in the overlap it agrees with the 85S map to 1.6 pts mean.
-- `prep/maps.py` now also writes `maps/sp_sun_wide.png` and `maps/sp_earth_wide.png` (±304 km, 240 m, 3.2 + 2.3 MB) and their `maps/index.json` entries; `prep/download.sh` fetches the two 75S TIFs (79 + 41 MB). I ran only the new `wide()` step, not the whole script.
-- The map draws them outside the 85S disc; `terrain_sample` / `terrain_search` and the report read them there too. The PSR layer and `psr_dist` still stop at 85°S (LPSR_75S_120M exists if you want to extend them).
+- `prep/maps.py wide` writes `maps/sp_sun_wide.png`, `sp_earth_wide.png` and `sp_psr_wide.png` (±304 km, 240 m) and their `maps/index.json` entries, downloading the 75S TIFs on first run (`prep/download.sh` lists the two visibility ones too).
+- The map draws them outside the 85S disc; `terrain_sample` / `terrain_search` and the report read them there too. The permanent-shadow layer is drawn to the map edge too; `psr_dist` (distance to shadow) still stops at 85°S.
 

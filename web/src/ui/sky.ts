@@ -244,12 +244,10 @@ function drawSky(g: G, W: number, H: number, m: SkyModel): Geom {
         g.stroke();
       };
       g.strokeStyle = color;
-      // rest of the lunar day after the mission: faint, so the body never floats free of a path
-      g.lineWidth = 1; g.globalAlpha = 0.2; seg(k - 1, n, true); seg(k - 1, n, false);
-      // the mission: solid where visible, dashed where terrain hides it
-      g.globalAlpha = 0.5; g.setLineDash([2, 3]); seg(0, k, false); g.setLineDash([]);
-      g.globalAlpha = 1; g.lineWidth = 1.6; seg(0, k, true);
-      g.globalAlpha = 1;
+      // the whole lunar day, mission or not: solid where visible, dashed where terrain hides it
+      // (the day ticks below stop at the mission's end)
+      g.lineWidth = 1; g.globalAlpha = 0.5; g.setLineDash([2, 3]); seg(0, n, false); g.setLineDash([]);
+      g.globalAlpha = 1; g.lineWidth = 1.6; seg(0, n, true);
     };
     track(s.earthAz, s.earthEl, (i) => s.earthVis[i] > 0, EARTH);
     track(s.sunAz, s.sunEl, (i) => s.sunFrac[i] > 0, SUN);
