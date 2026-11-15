@@ -1,4 +1,4 @@
-# Shackleton Live v2: design
+# Southern-Luna v2: design
 
 Status: draft, 2026-11-14. Open questions are at the bottom.
 

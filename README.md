@@ -1,4 +1,4 @@
-# Shackleton Live
+# Southern-Luna
 
 **Compare lunar landing sites and dates in seconds.** Pick a site and a date and see where the Sun and Earth sit relative to the real terrain horizon, how long until sunset and Earthset, how much power and direct-to-Earth communication the site gets, and what happens when the landing slips by a few weeks.
 

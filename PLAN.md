@@ -1,4 +1,4 @@
-# Shackleton Live — 24h build plan
+# Southern-Luna — 24h build plan
 
 > Historical: this is the plan as approved at the start. Where it differs from `CONTRACT.md`, `HANDOFF.md` or `README.md` (e.g. uncertainty smoothing is 45 deg, not 5; measured uncertainty is far smaller than the "73% +- 6%" example), those files win.
 

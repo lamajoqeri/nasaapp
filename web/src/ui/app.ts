@@ -1027,9 +1027,9 @@ export async function start(root: HTMLElement) {
   root.innerHTML = `
   <div class="shell boot" data-view="mission">
     <header class="top">
-      <a class="brand" href="./" aria-label="Shackleton Live, home">
+      <a class="brand" href="./" aria-label="Southern-Luna, home">
         <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 1.5a8.5 8.5 0 0 0 0 17 6 8.5 0 0 1 0-17z" fill="currentColor"/></svg>
-        <span>Shackleton Live</span>
+        <span>Southern-Luna</span>
       </a>
       <nav class="views" role="tablist" aria-label="Views">
         <button type="button" role="tab" data-view="mission" aria-selected="true">Mission</button>
