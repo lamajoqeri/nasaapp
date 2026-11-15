@@ -119,5 +119,4 @@
   .report .r-photos .r-grid { max-width: 140mm; margin: 0 auto; }
   .report :is(.r-tab, .r-tab caption, .r-kv, .r-fig figcaption) { font-size: 9pt; }
   .report :is(.r-scen, .r-reopen) { font-size: 9.5pt; }
-  .report #r-refs a[href^="http"]::after { content: ' ' attr(href); overflow-wrap: anywhere; }
 }

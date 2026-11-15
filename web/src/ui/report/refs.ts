@@ -22,18 +22,7 @@ export function cite(...keys: string[]): string {
   const parts = keys.map((k) => {
     const i = REFS.findIndex((r) => r.key === k);
     if (i < 0) { console.warn(`report: unknown reference "${k}"`); return '?'; }
-    return `<a href="#ref-${k}" data-ref="ref-${k}">${i + 1}</a>`;
+    return `<a href="#ref-${k}">${i + 1}</a>`;
   });
   return `<span class="cite">[${parts.join(', ')}]</span>`;
-}
-
-// The app reloads on hashchange (pasted share links), so following a plain "#ref-x" link would throw the report
-// away. Scroll instead; the href stays for printed PDFs.
-if (typeof document !== 'undefined') {
-  document.addEventListener('click', (e) => {
-    const a = (e.target as Element | null)?.closest?.('a[data-ref]');
-    if (!a) return;
-    e.preventDefault();
-    document.getElementById(a.getAttribute('data-ref')!)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
 }
