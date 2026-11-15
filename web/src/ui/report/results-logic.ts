@@ -91,7 +91,9 @@ function choose(xs: Summary[], missionDays: number, noun: string): string {
   const s = ties.length > 1
     ? `We recommend scenarios ${and(ties.map(who))} equally: they tie for first ${crit}.`
     : `We recommend scenario ${who(top)}: it comes first ${crit}.`;
-  return f.length ? `${s} No ${noun.slice(0, -1)} passes both checks; ${top.letter} has ${and(f)}.` : s;
+  if (!f.length) return s;
+  const lead = ties.length > 1 ? `Scenarios ${and(ties.map(who))} tie for first` : `Scenario ${who(top)} comes first`;
+  return `No ${noun.slice(0, -1)} passes both checks, so we do not recommend any of them as planned. ${lead} ${crit}; ${top.letter} has ${and(f)}.`;
 }
 
 /* ---- validation data (validation.json) ---- */

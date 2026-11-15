@@ -530,7 +530,7 @@ export const conclusionSection: SectionFn = async (ctx) => {
     if (w.r.mission.psrM !== null && w.r.mission.psrM < 1) out.push('the site is inside a permanently shadowed region');
     if (l && a) {
       const cs = versus(l.ground.sun, l.nasaSun, a.a.sun.mae * 100);
-      if (!cs.within) out.push(`at ground level our long-term Sun visibility differs from NASA's map by ${first(cs.text)}, more than the region's typical error`);
+      if (!cs.within) out.push(`the sunlight depends on the exact spot and height: at ground level our long-term Sun value differs from NASA's map by ${first(cs.text)}${w.x.sc.spec.mast ? ` (at the ${w.x.sc.spec.mast} m mast it is ${l.mast.sun.toFixed(1)}%)` : ''}, more than the region's typical error, so confirm the spot on a finer terrain model`);
     }
     if (w.slipS) {
       if (w.slipS.pv.level !== w.det.pv.level) out.push(`landing ${ctx.slip} d later changes power from ${w.det.pv.label} to ${w.slipS.pv.label}`);

@@ -37,13 +37,13 @@ describe('ranking and recommendation', () => {
     const t = recommendation([sum('A', 90.2, 60, 'ok', 'ok'), sum('B', 89.8, 60.4, 'ok', 'ok')], 14, NOW);
     expect(t).toContain('We recommend scenarios A (Site A) and B (Site B) equally');
     const g = recommendation([sum('A', 90, 60, 'ok', 'gaps'), sum('B', 80, 60, 'marginal', 'gaps')], 14, NOW);
-    expect(g).toContain('No scenario passes both checks; A has comms Gaps');
+    expect(g).toMatch(/^No scenario passes both checks, so we do not recommend any of them as planned\. Scenario A \(Site A\) comes first when .*; A has comms Gaps/);
   });
 
   it('recommends among future landings and keeps past ones as references', () => {
     const apollo = { ...sum('D', 99, 100, 'ok', 'ok'), t: Date.UTC(1969, 6, 20) };
     const r = recommendation([sum('A', 70, 60, 'no', 'gaps'), sum('B', 60, 60, 'no', 'ok'), apollo], 14, NOW);
-    expect(r).toMatch(/^We recommend scenario B \(Site B\): it comes first when the two future landings are ranked/);
+    expect(r).toMatch(/^No future landing passes both checks, so we do not recommend any of them as planned\. Scenario B \(Site B\) comes first when the two future landings are ranked/);
     expect(r).toContain('D (Site D) landed in the past and serves only as a reference.');
     expect(recommendation([apollo], 14, NOW)).toMatch(/^We recommend scenario D/); // only past landings: compare them anyway
   });
