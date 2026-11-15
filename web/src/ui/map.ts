@@ -7,8 +7,8 @@ export interface MapSite { id: string; name: string; lat: number; lon: number; p
 export interface MapMarker { lat: number; lon: number; label: string }
 export interface MapHandle {
   setMarkers(m: MapMarker[]): void; focus(lat: number, lon: number): void; destroy(): void;
-  setMode(m: Mode): void; setOverlay(o: OverlayId): void;
-  state(): { mode: Mode; overlay: OverlayId; center: [number, number]; kmAcross: number };
+  setMode(m: Mode): void; setOverlay(o: LayerId): void;
+  state(): { mode: Mode; overlay: LayerId; center: [number, number]; kmAcross: number };
   /** Zoom and pan so every point is in view (picks the south-pole map when they all fit on it). */
   fit(points: [number, number][]): void;
   /** Centre on lat/lon with `kmAcross` km across the viewport's width (either may be omitted). */
@@ -138,6 +138,49 @@ export function rampLut(end: RGB, start: RGB = BG_RGB): Uint8ClampedArray {
   return lut;
 }
 
+type Stop = [number, RGB];
+/** 256-entry RGB LUT interpolated linearly through `stops` ([t in 0..1, colour], sorted by t). */
+export function stopsLut(stops: Stop[]): Uint8ClampedArray {
+  const lut = new Uint8ClampedArray(768);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    let k = 0;
+    while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
+    const [t0, a] = stops[k], [t1, b] = stops[k + 1], f = Math.min(1, Math.max(0, (t - t0) / (t1 - t0)));
+    for (let c = 0; c < 3; c++) lut[i * 3 + c] = a[c] + (b[c] - a[c]) * f;
+  }
+  return lut;
+}
+
+/** Slope (degrees) of a row-major w x h height grid with spacing `px`: central differences, one-sided at the edges. */
+export function slopeDeg(g: ArrayLike<number>, w: number, h: number, px: number): Float32Array {
+  const out = new Float32Array(w * h), K = 180 / Math.PI;
+  for (let r = 0; r < h; r++) {
+    const r0 = r > 0 ? r - 1 : r, r1 = r < h - 1 ? r + 1 : r;
+    for (let c = 0; c < w; c++) {
+      const c0 = c > 0 ? c - 1 : c, c1 = c < w - 1 ? c + 1 : c;
+      const dx = (g[r * w + c1] - g[r * w + c0]) / ((c1 - c0) * px);
+      const dy = (g[r1 * w + c] - g[r0 * w + c]) / ((r1 - r0) * px);
+      out[r * w + c] = Math.atan(Math.hypot(dx, dy)) * K;
+    }
+  }
+  return out;
+}
+
+/** Quantiles `qs` (0..1) of every `step`th value of `v`. */
+export function quantiles(v: ArrayLike<number>, qs: number[], step = 1): number[] {
+  const s = new Float32Array(Math.ceil(v.length / step));
+  for (let i = 0, j = 0; i < v.length; i += step) s[j++] = v[i];
+  s.sort();
+  return qs.map((q) => s[Math.min(s.length - 1, Math.max(0, Math.round(q * (s.length - 1))))]);
+}
+
+/** Image bounds (pixel edges) of a DEM tile whose x0/y0 are the centre of the top-left pixel (as core/dem.ts reads them). */
+export function tileBounds(t: { x0: number; y0: number; px: number; w: number; h: number }): Bounds {
+  const e = t.px / 2;
+  return [t.x0 - e, t.y0 - (t.h - 1) * t.px - e, t.x0 + (t.w - 1) * t.px + e, t.y0 + e];
+}
+
 // ---------- canvas colours (match the tokens in style.css) ----------
 
 const BG = '#0a0b0d', FG = '#e8e6e1', MUTED = '#8e939c';
@@ -156,6 +199,8 @@ const DEFAULT_BOUNDS: Record<string, Bounds> = {
   shackleton_hillshade: [-30000, -30000, 10000, 10000],
   sp_sun: [-151740, -151740, 151740, 151740],
   sp_earth: [-151740, -151740, 151740, 151740],
+  elevation: [-304000, -303920, 303920, 304000],
+  slope: [-304000, -303920, 303920, 304000],
   global_hillshade: [0, -90, 360, 90],
 };
 const FILES: Record<string, string> = {
@@ -167,8 +212,38 @@ const NAMES: Record<string, string> = {
   sp_sun: 'sunlight overlay', sp_earth: 'Earth-view overlay', global_hillshade: 'whole-Moon map',
 };
 
-export type OverlayId = 'none' | 'sp_sun' | 'sp_earth';
-interface Overlay { canvas: HTMLCanvasElement; data: Uint8Array; w: number; h: number }
+export type LayerId = 'none' | 'sp_sun' | 'sp_earth' | 'elevation' | 'slope';
+/** @deprecated old name */
+export type OverlayId = LayerId;
+type Layer = Exclude<LayerId, 'none'>;
+/** A shading layer: RGBA canvas over bounds[id], value `at(pixel index)` in the layer's unit, legend range lo..hi. */
+interface Overlay { canvas: HTMLCanvasElement; w: number; h: number; at(i: number): number; lo: number; hi: number }
+
+const DEM_TILE = 'sp_240m';
+const SLOPE_MAX = 20;
+const PGDA_NOTE = 'data poleward of 85°S';
+const LAYERS: Record<Layer, { label: string; lut: Uint8ClampedArray; ends(lo: number, hi: number): [string, string]; note: string; read(v: number): string }> = {
+  sp_sun: {
+    label: 'Sunlight %', lut: rampLut(SUN_RGB), ends: () => ['0%', '100% of time'], note: PGDA_NOTE,
+    read: (v) => `Sun visible ${Math.round(v)}% of the time (NASA average)`,
+  },
+  sp_earth: {
+    label: 'Earth view %', lut: rampLut(EARTH_RGB), ends: () => ['0%', '100% of time'], note: PGDA_NOTE,
+    read: (v) => `Earth visible ${Math.round(v)}% of the time (NASA average)`,
+  },
+  elevation: {
+    label: 'Elevation',
+    lut: stopsLut([[0, [24, 28, 82]], [0.35, [24, 120, 140]], [0.7, [226, 206, 84]], [1, [250, 248, 240]]]),
+    ends: (lo, hi) => [`${(lo / 1000).toFixed(1)} km`, `${(hi / 1000).toFixed(1)} km`], note: 'vs 1737.4 km radius',
+    read: (v) => `Elevation ${(v / 1000).toFixed(2)} km`,
+  },
+  slope: {
+    label: 'Slope', // t = deg / SLOPE_MAX: green to 5°, yellow 8–10°, red from 15°
+    lut: stopsLut([[0, [40, 120, 70]], [0.25, [100, 200, 90]], [0.45, [240, 210, 70]], [0.75, [225, 70, 50]], [1, [160, 30, 70]]]),
+    ends: () => ['0°', `≥${SLOPE_MAX}°`], note: '240 m baseline',
+    read: (v) => `Slope ${v.toFixed(1)}°`,
+  },
+};
 
 // ---------- component ----------
 
@@ -177,7 +252,7 @@ export function mountMap(el: HTMLElement, opts: {
   sites: MapSite[];
   onPick(lat: number, lon: number, siteId?: string): void;
   /** Region/overlay toolbar clicks go here when given (so the app can route them through its actions). */
-  onBar?(c: { mode?: Mode; overlay?: OverlayId }): void;
+  onBar?(c: { mode?: Mode; overlay?: LayerId }): void;
 }): MapHandle {
   const root = document.createElement('div');
   root.className = 'lmap';
@@ -187,14 +262,15 @@ export function mountMap(el: HTMLElement, opts: {
         <button type="button" data-mode="polar" aria-pressed="true">South Pole</button>
         <button type="button" data-mode="global" aria-pressed="false">Whole Moon</button>
       </div>
-      <div class="lmap-seg lmap-ov" role="group" aria-label="Overlay">
-        <button type="button" data-ov="none" aria-pressed="true">Terrain</button>
-        <button type="button" data-ov="sp_sun" aria-pressed="false">Sunlight</button>
-        <button type="button" data-ov="sp_earth" aria-pressed="false">Earth view</button>
-      </div>
-      <div class="lmap-seg lmap-zoom" role="group" aria-label="Zoom">
-        <button type="button" data-zoom="out" aria-label="Zoom out">&minus;</button>
-        <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+      <div class="lmap-right">
+        <div class="lmap-seg lmap-zoom" role="group" aria-label="Zoom">
+          <button type="button" data-zoom="out" aria-label="Zoom out">&minus;</button>
+          <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+        </div>
+        <div class="lmap-seg lmap-layers" role="group" aria-label="Map shading">
+          ${(Object.keys(LAYERS) as Layer[]).map((id) => `<button type="button" data-ov="${id}" aria-pressed="false">${LAYERS[id].label}</button>`).join('')}
+          <div class="lmap-legend" hidden><canvas width="256" height="1"></canvas><div class="lmap-legend-ends"><span></span><span></span></div><div class="lmap-legend-note"></div></div>
+        </div>
       </div>
     </div>
     <div class="lmap-stage">
@@ -202,7 +278,6 @@ export function mountMap(el: HTMLElement, opts: {
       <p class="lmap-loading">Loading map…</p>
     </div>
     <div class="lmap-foot">
-      <div class="lmap-legend" hidden><span>0%</span><canvas width="256" height="1"></canvas><span>100% of the time</span><span class="lmap-legend-note">· data poleward of 85°S</span></div>
       <p class="lmap-err" role="status"></p>
       <p class="lmap-readout"></p>
     </div>`;
@@ -212,7 +287,7 @@ export function mountMap(el: HTMLElement, opts: {
   const canvas = q<HTMLCanvasElement>('.lmap-canvas');
   const ctx = canvas.getContext('2d')!;
   const loadingEl = q('.lmap-loading'), readoutEl = q('.lmap-readout'), errEl = q('.lmap-err');
-  const legendEl = q('.lmap-legend'), ovGroup = q('.lmap-ov');
+  const legendEl = q('.lmap-legend'), ovGroup = q('.lmap-layers');
   const HINT = 'Drag to pan, scroll to zoom, click to choose a point.';
   readoutEl.textContent = HINT;
 
@@ -223,13 +298,13 @@ export function mountMap(el: HTMLElement, opts: {
   const bounds: Record<string, Bounds> = { ...DEFAULT_BOUNDS };
   const images: Record<string, HTMLImageElement> = {};
   const requested = new Set<string>();
-  const overlays: Partial<Record<OverlayId, Overlay>> = {};
+  const overlays: Partial<Record<Layer, Overlay>> = {};
+  const building = new Set<Layer>();             // DEM layers being fetched/computed
   let detail: CanvasImageSource | null = null;   // Shackleton map, matched + feathered into the base
-  const luts = { sp_sun: rampLut(SUN_RGB), sp_earth: rampLut(EARTH_RGB) };
   const errors = new Set<string>();
 
   let mode: Mode = 'polar';
-  let overlay: OverlayId = 'none';
+  let overlay: LayerId = 'none';
   let view: View = { cx: 0, cy: 0, scale: 1, w: 0, h: 0 };
   const saved: Partial<Record<Mode, { cx: number; cy: number; scale: number }>> = {};
   let pending: (() => void) | null = null;  // view change requested before the first layout
@@ -260,7 +335,7 @@ export function mountMap(el: HTMLElement, opts: {
       if (dead) return;
       images[id] = img;
       if (id === 'sp_sun' || id === 'sp_earth') {
-        try { overlays[id] = buildOverlay(img, luts[id], bounds[id]); } catch { fail(NAMES[id]); }
+        try { overlays[id] = buildOverlay(img, LAYERS[id].lut, bounds[id]); } catch { fail(NAMES[id]); }
       }
       // Build the blended detail once both images are in, here rather than in the draw path (4M-pixel loop).
       const d = images.shackleton_hillshade, base = images.sp_hillshade;
@@ -275,7 +350,43 @@ export function mountMap(el: HTMLElement, opts: {
 
   function refreshLoading() {
     const failed = errors.has(NAMES[baseId()]);
-    loadingEl.hidden = !!images[baseId()] || failed;
+    const busy = mode === 'polar' && overlay !== 'none' && building.has(overlay);
+    loadingEl.textContent = busy ? `Loading ${LAYERS[overlay as Layer].label.toLowerCase()}…` : 'Loading map…';
+    loadingEl.hidden = !busy && (!!images[baseId()] || failed);
+  }
+
+  // DEM layers: the 12 MB sp_240m tile is fetched once (the worker usually has it in the HTTP cache) and each
+  // layer's canvas is built once, the first time it's selected (~100 ms on the main thread).
+  let dem: Promise<{ z: Float32Array; w: number; h: number; px: number }> | null = null;
+  function loadDem() {
+    return (dem ??= (async () => {
+      const get = async (f: string) => { const r = await fetch(opts.dataBase + 'dem/' + f, on); if (!r.ok) throw new Error(String(r.status)); return r; };
+      const t = ((await (await get('manifest.json')).json()).tiles as { id: string; file: string; w: number; h: number; x0: number; y0: number; px: number; scale: number; offset: number }[])
+        .find((x) => x.id === DEM_TILE);
+      if (!t) throw new Error('no ' + DEM_TILE);
+      const raw = new Int16Array(await (await get(t.file)).arrayBuffer());
+      const z = new Float32Array(raw.length);
+      for (let i = 0; i < raw.length; i++) z[i] = t.offset + t.scale * raw[i];
+      bounds.elevation = bounds.slope = tileBounds(t);
+      return { z, w: t.w, h: t.h, px: t.px };
+    })());
+  }
+  function ensureLayer(id: Layer) {
+    if (overlays[id] || building.has(id) || (id !== 'elevation' && id !== 'slope')) return;
+    building.add(id);
+    loadDem()
+      .then((d) => new Promise<typeof d>((r) => setTimeout(() => r(d), 16))) // let the loading text paint first
+      .then((d) => {
+        if (dead) return;
+        if (id === 'elevation') {
+          const [lo, hi] = quantiles(d.z, [0.01, 0.99], 31);
+          overlays[id] = buildGrid(d.z, d.w, d.h, LAYERS[id].lut, lo, hi);
+        } else {
+          overlays[id] = buildGrid(slopeDeg(d.z, d.w, d.h, d.px), d.w, d.h, LAYERS[id].lut, 0, SLOPE_MAX);
+        }
+      })
+      .catch(() => { if (!dead) fail(`${LAYERS[id].label.toLowerCase()} layer`); })
+      .finally(() => { if (dead) return; building.delete(id); refreshLoading(); syncChrome(); draw(); });
   }
 
   fetch(opts.dataBase + 'maps/index.json', on)
@@ -338,8 +449,10 @@ export function mountMap(el: HTMLElement, opts: {
     if (view.w) resetView();
   }
 
-  function setOverlay(o: OverlayId) {
+  function setOverlay(o: LayerId) {
     overlay = o;
+    if (o !== 'none') ensureLayer(o);
+    refreshLoading();
     for (const b of root.querySelectorAll<HTMLButtonElement>('[data-ov]')) b.setAttribute('aria-pressed', String(b.dataset.ov === o));
     syncChrome(); draw();
   }
@@ -348,14 +461,21 @@ export function mountMap(el: HTMLElement, opts: {
     const show = mode === 'polar' && overlay !== 'none';
     legendEl.hidden = !show;
     if (show) {
-      const c = legendEl.querySelector('canvas')!, g = c.getContext('2d')!, lut = luts[overlay as 'sp_sun'];
+      const L = LAYERS[overlay as Layer], o = overlays[overlay as Layer];
+      const c = legendEl.querySelector('canvas')!, g = c.getContext('2d')!, lut = L.lut;
       const im = g.createImageData(256, 1);
       for (let i = 0; i < 256; i++) im.data.set([lut[i * 3], lut[i * 3 + 1], lut[i * 3 + 2], 255], i * 4);
       g.putImageData(im, 0, 0);
+      const ends = o ? L.ends(o.lo, o.hi) : ['…', '…'];
+      legendEl.querySelectorAll('.lmap-legend-ends span').forEach((s, i) => { s.textContent = ends[i]; });
+      q('.lmap-legend-note').textContent = L.note;
     }
+    const about: Record<LayerId, string> = {
+      none: '', sp_sun: ', coloured by how often the Sun is visible', sp_earth: ', coloured by how often Earth is visible',
+      elevation: ', coloured by elevation', slope: ', coloured by slope',
+    };
     canvas.setAttribute('aria-label', (mode === 'polar'
-      ? 'Map of the lunar south pole, 80 to 90 degrees south'
-      + (overlay === 'sp_sun' ? ', coloured by how often the Sun is visible' : overlay === 'sp_earth' ? ', coloured by how often Earth is visible' : '')
+      ? 'Map of the lunar south pole, 80 to 90 degrees south' + about[overlay]
       : 'Map of the whole Moon')
       + `, showing ${opts.sites.length} catalogue sites. ${HINT} Arrow keys pan, plus and minus zoom.`);
   }
@@ -497,11 +617,12 @@ export function mountMap(el: HTMLElement, opts: {
 
   // ----- readout -----
 
-  function pct(id: 'sp_sun' | 'sp_earth', x: number, y: number): number | null {
+  /** Layer value at map point (x, y), null outside its coverage or before it's built. */
+  function pct(id: Layer, x: number, y: number): number | null {
     const o = overlays[id];
-    if (Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
+    if ((id === 'sp_sun' || id === 'sp_earth') && Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
     const p = o && imgPixel(bounds[id], o.w, o.h, x, y);
-    return o && p ? Math.round((o.data[p[1] * o.w + p[0]] / 255) * 100) : null;
+    return o && p ? o.at(p[1] * o.w + p[0]) : null;
   }
 
   function readout(sx: number, sy: number) {
@@ -511,9 +632,14 @@ export function mountMap(el: HTMLElement, opts: {
     let s = (hoverSite ? hoverSite.name + ' · ' : '') + formatLatLon(lat, lon);
     if (mode === 'polar') {
       const [ox, oy] = hoverSite ? spFwd(lat, lon) : [mx, my];
-      const sun = pct('sp_sun', ox, oy), earth = pct('sp_earth', ox, oy);
-      const parts = [sun != null && `Sun visible ${sun}%`, earth != null && `Earth visible ${earth}%`].filter(Boolean);
-      if (parts.length) s += ` · ${parts.join(' · ')} of the time (NASA average)`;
+      if (overlay !== 'none') {
+        const v = pct(overlay, ox, oy);
+        if (v != null) s += ' · ' + LAYERS[overlay].read(v);
+      } else {
+        const sun = pct('sp_sun', ox, oy), earth = pct('sp_earth', ox, oy);
+        const parts = [sun != null && `Sun visible ${Math.round(sun)}%`, earth != null && `Earth visible ${Math.round(earth)}%`].filter(Boolean);
+        if (parts.length) s += ` · ${parts.join(' · ')} of the time (NASA average)`;
+      }
     }
     readoutEl.textContent = s;
   }
@@ -631,7 +757,10 @@ export function mountMap(el: HTMLElement, opts: {
     const b = (e.target as HTMLElement).closest('button');
     if (!b) return;
     if (b.dataset.mode) opts.onBar ? opts.onBar({ mode: b.dataset.mode as Mode }) : setMode(b.dataset.mode as Mode);
-    else if (b.dataset.ov) opts.onBar ? opts.onBar({ overlay: b.dataset.ov as OverlayId }) : setOverlay(b.dataset.ov as OverlayId);
+    else if (b.dataset.ov) {
+      const o: LayerId = b.dataset.ov === overlay ? 'none' : (b.dataset.ov as Layer); // clicking the active layer turns it off
+      opts.onBar ? opts.onBar({ overlay: o }) : setOverlay(o);
+    }
     else if (b.dataset.zoom) zoomBy(b.dataset.zoom === 'in' ? 1.5 : 1 / 1.5);
   }, on);
 
@@ -697,7 +826,20 @@ function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds):
     px[j + 3] = 255 * feather(OVERLAY_R - Math.hypot(x, y), OVERLAY_FEATHER);
   }
   g.putImageData(im, 0, 0);
-  return { canvas, data, w, h };
+  return { canvas, w, h, at: (i) => (data[i] / 255) * 100, lo: 0, hi: 100 };
+}
+
+/** Colour a w x h value grid through `lut` over lo..hi (clamped), opaque; keeps `v` for the readout. */
+function buildGrid(v: Float32Array, w: number, h: number, lut: Uint8ClampedArray, lo: number, hi: number): Overlay {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const g = canvas.getContext('2d')!, im = g.createImageData(w, h), px = im.data, k = 255 / (hi - lo);
+  for (let i = 0, j = 0; i < v.length; i++, j += 4) {
+    const t = Math.min(255, Math.max(0, Math.round((v[i] - lo) * k))) * 3;
+    px[j] = lut[t]; px[j + 1] = lut[t + 1]; px[j + 2] = lut[t + 2]; px[j + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  return { canvas, w, h, at: (i) => v[i], lo, hi };
 }
 
 /**

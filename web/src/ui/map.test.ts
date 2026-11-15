@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { spFwd } from '../core/geom';
 import {
   clampView, detailVisible, feather, fitPoints, fitScale, formatLatLon, imgPixel, llToMap, lon180, lon360, mapToLl,
-  matchStats, niceScaleKm, rampLut, rectsOverlap, toMap, toScreen, zoomAt, type Bounds, type View,
+  matchStats, niceScaleKm, quantiles, rampLut, rectsOverlap, slopeDeg, stopsLut, tileBounds, toMap, toScreen, zoomAt, type Bounds, type View,
 } from './map';
 
 const SP: Bounds = [-304000, -303920, 303920, 304000];
@@ -161,5 +161,33 @@ describe('fitPoints', () => {
     expect(f.cx).toBe(5000); expect(f.cy).toBe(2000);
     expect(f.scale).toBeCloseTo(1000 / 14000);           // width-limited: 10 km * 1.4
     expect(fitPoints([[5, 5]], 1000, 1000, 3000).scale).toBeCloseTo(1000 / 4200);
+  });
+});
+
+describe('DEM layers', () => {
+  it('slopeDeg recovers the slope of a tilted plane, edges included', () => {
+    const w = 6, h = 5, px = 240, gx = Math.tan(10 * Math.PI / 180), gy = 0.05;
+    const g = new Float32Array(w * h);
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) g[r * w + c] = 100 + gx * c * px + gy * r * px;
+    const want = Math.atan(Math.hypot(gx, gy)) * 180 / Math.PI;
+    for (const v of slopeDeg(g, w, h, px)) near(v, want, 1e-3);
+    for (const v of slopeDeg(new Float32Array(9).fill(7), 3, 3, 240)) expect(v).toBe(0);
+  });
+
+  it('stopsLut hits each stop and interpolates between', () => {
+    const lut = stopsLut([[0, [0, 0, 0]], [0.5, [200, 100, 0]], [1, [200, 100, 250]]]);
+    expect([...lut.slice(0, 3)]).toEqual([0, 0, 0]);
+    expect([...lut.slice(765)]).toEqual([200, 100, 250]);
+    near(lut[64 * 3], 100, 2);           // halfway to the middle stop
+    near(lut[191 * 3 + 2], 125, 2);
+  });
+
+  it('quantiles of 0..100', () => {
+    const v = Float32Array.from({ length: 101 }, (_, i) => 100 - i);
+    expect(quantiles(v, [0, 0.01, 0.5, 0.99, 1])).toEqual([0, 1, 50, 99, 100]);
+  });
+
+  it('tileBounds: x0/y0 are top-left pixel centres; sp_240m matches the south-pole hillshade', () => {
+    expect(tileBounds({ x0: -303880, y0: 303880, px: 240, w: 2533, h: 2533 })).toEqual(SP);
   });
 });

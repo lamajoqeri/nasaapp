@@ -2,18 +2,23 @@
 .lmap { font-size: 12px; font-variant-numeric: tabular-nums; }
 .lmap [hidden] { display: none; }
 
-.lmap-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
+.lmap-bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; margin-bottom: 8px; }
 .lmap-seg { display: flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
 .lmap-seg button { height: 24px; font-size: 12px; color: var(--muted); background: none; border: 0; border-radius: 2px; padding: 0 9px; }
 .lmap-seg button:hover { color: var(--fg); }
 .lmap-seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .lmap-seg button:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; position: relative; z-index: 1; }
 .lmap-canvas:focus-visible { outline: 1px solid var(--fg); outline-offset: -2px; }
-.lmap-zoom { margin-left: auto; }
+.lmap-right { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .lmap-zoom button { width: 26px; padding: 0; font-size: 14px; }
 
-.lmap-legend { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; color: var(--muted); white-space: nowrap; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
-.lmap-legend canvas { width: 96px; height: 6px; border: 1px solid var(--line); border-radius: 0; background: none; }
+/* Shading layers: a vertical stack under the zoom buttons, legend for the active one at the bottom. */
+.lmap-layers { flex-direction: column; width: 150px; }
+.lmap-layers button { text-align: left; }
+.lmap-legend { padding: 5px 5px 3px; color: var(--muted); font-size: 11px; line-height: 1.3; }
+.lmap-legend canvas { display: block; width: 100%; height: 8px; border: 1px solid var(--line); border-radius: 0; background: none; }
+.lmap-legend-ends { display: flex; justify-content: space-between; margin-top: 3px; color: var(--fg); white-space: nowrap; }
+.lmap-legend-note { margin-top: 1px; }
 
 .lmap-stage { position: relative; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .lmap-canvas { display: block; width: 100%; height: clamp(320px, 48vh, 560px); background: var(--bg); border: 0; border-radius: 0; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -39,6 +44,8 @@
   .lmap-zoom button { width: 32px; }
 }
 @media (max-width: 640px) {
+  .lmap-layers { width: 116px; }
+  .lmap-layers button { height: 28px; padding: 0 7px; }
   .pane .lmap-bar { top: 56px; left: 12px; }
   .pane .lmap-readout { white-space: normal; }
 }
