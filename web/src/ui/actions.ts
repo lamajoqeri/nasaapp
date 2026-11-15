@@ -5,12 +5,12 @@
 
 /** The JSON Schema subset the API's strict tool mode accepts (no minimum/maximum: check ranges in run()). */
 export interface PropSchema { type: 'string' | 'number' | 'integer' | 'boolean'; description?: string; enum?: readonly (string | number)[] }
-export interface JSONSchema {
+export type JSONSchema = { // a type alias, not an interface, so it fits the SDK's index-signature InputSchema
   type: 'object';
   properties: Record<string, PropSchema>;
   required: string[];
   additionalProperties: false;
-}
+};
 
 export interface Action<A = any> {
   name: string;             // 'scenario.add', 'view.set', ...
@@ -55,9 +55,9 @@ export function validate(s: JSONSchema, args: unknown): string[] {
 /** Run an action by name (dotted, or the underscored tool name). Rejects on unknown names and invalid arguments. */
 export async function run(name: string, args: unknown = {}): Promise<unknown> {
   const a = actions.get(name) ?? [...actions.values()].find((x) => toolName(x.name) === name);
-  if (!a) throw new Error(`Unknown action "${name}". Available: ${[...actions.keys()].join(', ')}`);
+  if (!a) throw new Error(`Unknown action "${name}". Available: ${[...actions.keys()].map(toolName).join(', ')}`);
   const bad = validate(a.schema, args);
-  if (bad.length) throw new Error(`${a.name}: ${bad.join('; ')}`);
+  if (bad.length) throw new Error(`${toolName(a.name)}: ${bad.join('; ')}`);
   return a.run(args);
 }
 

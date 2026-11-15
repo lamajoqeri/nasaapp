@@ -5,6 +5,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 export const MODEL = 'claude-opus-5-5';
 export const SIGN_OUT_LABEL = 'Forget key';
+export const TOO_LONG = 'This chat is now too long for the model. Start a new chat to continue.';
 
 const KEY = 'shackleton-live.anthropic-key';
 let mem = '';  // fallback when storage is blocked (private windows): the key then lasts until the tab closes
@@ -47,7 +48,7 @@ const load = () => (sdk ??= import('@anthropic-ai/sdk')); // lazy: the SDK stays
 
 export async function createClient(): Promise<Anthropic> {
   const { default: Client } = await load();
-  return new Client({ apiKey: key(), dangerouslyAllowBrowser: true });
+  return new Client({ apiKey: key(), baseURL: 'https://api.anthropic.com', dangerouslyAllowBrowser: true });
 }
 
 /** A failure as a sentence for the thread. `auth`: the credentials were rejected. `aborted`: the user pressed stop. */
@@ -58,6 +59,7 @@ export async function explain(e: unknown): Promise<{ text: string; auth?: boolea
   if (e instanceof A.PermissionDeniedError) return { text: `This key cannot use ${MODEL}: ${e.message}`, auth: true };
   if (e instanceof A.RateLimitError) return { text: 'Rate limited by the API. Wait a moment and send again.' };
   if (e instanceof A.APIConnectionError) return { text: 'Could not reach api.anthropic.com. Check the connection and send again.' };
+  if (e instanceof A.BadRequestError && /prompt is too long/i.test(e.message)) return { text: TOO_LONG };
   if (e instanceof A.APIError) return { text: `The API returned an error (${e.status ?? 'no status'}): ${e.message}` };
   return { text: `Something went wrong: ${(e as Error)?.message ?? e}` };
 }

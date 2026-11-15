@@ -1,8 +1,8 @@
 // The agent loop: stream a turn, run the tool calls it asks for against the action registry, send every
 // result back in one user message, repeat until the model stops asking. No DOM: the panel passes callbacks.
 import type Anthropic from '@anthropic-ai/sdk';
-import { actions, run, toolName, tools } from '../ui/actions';
-import { MODEL } from './client';
+import { run, tools } from '../ui/actions';
+import { MODEL, TOO_LONG } from './client';
 
 export interface LoopUI {
   /** Streamed assistant text. */
@@ -13,39 +13,60 @@ export interface LoopUI {
   notice(text: string): void;
 }
 
-/** Runs until the model ends its turn. `history` is appended to in place and stays valid to resend, also after a stop. */
-export async function runTurn(client: Anthropic, system: string, history: Anthropic.MessageParam[], ui: LoopUI, signal: AbortSignal): Promise<void> {
+/**
+ * Sends `text` and runs until the model ends its turn. `history` is appended to in place and stays valid to resend.
+ * On a refusal or an error the whole turn (from `text` on) is dropped, so it can't merge into the next message.
+ * After a stop it is kept: it ends in the user's text or in tool results, and the next message joins that user turn.
+ */
+export async function runTurn(client: Anthropic, system: string, history: Anthropic.MessageParam[], text: string, ui: LoopUI, signal: AbortSignal): Promise<void> {
+  const mark = history.length;
+  history.push({ role: 'user', content: text });
+  try {
+    if (!await turn(client, system, history, ui, signal)) history.length = mark;
+  } catch (e) {
+    if (!signal.aborted) history.length = mark;
+    throw e;
+  }
+}
+
+/** False when the turn must be dropped from the history. */
+async function turn(client: Anthropic, system: string, history: Anthropic.MessageParam[], ui: LoopUI, signal: AbortSignal): Promise<boolean> {
   for (;;) {
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }], // stable prefix: tools + system
-      tools: tools() as unknown as Anthropic.Tool[],
+      tools: tools(),
       messages: history,
+      cache_control: { type: 'ephemeral' }, // automatic breakpoint on the conversation so far
     }, { signal });
     stream.on('text', (d) => ui.text(d));
     const msg = await stream.finalMessage();
 
     const calls = msg.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-    if (msg.stop_reason === 'refusal' || msg.stop_reason === 'max_tokens') {
-      // Never run this turn's tools: a refusal or the token cap can cut a call off mid-input. Keep the turn only
-      // if it leaves the history resendable (an unanswered tool_use would not).
-      if (msg.content.length && !calls.length && msg.stop_reason === 'max_tokens') history.push({ role: 'assistant', content: msg.content });
-      return ui.notice(msg.stop_reason === 'refusal'
-        ? 'Claude declined to continue with this request. Try rephrasing it, or start a new chat.'
-        : 'The reply hit the length limit and was cut off. Ask for a shorter answer or a smaller step.');
+    if (msg.stop_reason === 'refusal') {
+      ui.notice('Claude declined to continue with this request. Try rephrasing it, or start a new chat.');
+      return false;
+    }
+    if (msg.stop_reason === 'max_tokens' || msg.stop_reason === 'model_context_window_exceeded') {
+      // Never run this turn's tools: the cap can cut a call off mid-input. Keep the reply only if it leaves the
+      // history resendable (an unanswered tool_use would not).
+      if (msg.content.length && !calls.length) history.push({ role: 'assistant', content: msg.content });
+      ui.notice(msg.stop_reason === 'max_tokens'
+        ? 'The reply hit the length limit and was cut off. Ask for a shorter answer or a smaller step.'
+        : TOO_LONG);
+      return true;
     }
     if (msg.content.length) history.push({ role: 'assistant', content: msg.content }); // the whole content, thinking blocks included
-    if (msg.stop_reason !== 'tool_use' || !calls.length) return;
+    if (msg.stop_reason !== 'tool_use' || !calls.length) return true;
 
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const c of calls) {
-      const name = [...actions.keys()].find((n) => toolName(n) === c.name) ?? c.name;
       if (signal.aborted) { results.push({ type: 'tool_result', tool_use_id: c.id, content: 'Not run: the user pressed stop.', is_error: true }); continue; }
-      const done = ui.tool(name, c.input);
+      const done = ui.tool(c.name, c.input);
       try {
-        const r = await run(name, c.input);
+        const r = await run(c.name, c.input); // run() maps the underscored tool name back to the action
         results.push({ type: 'tool_result', tool_use_id: c.id, content: JSON.stringify(r ?? null) });
         done(r, false);
       } catch (e) {
@@ -55,6 +76,6 @@ export async function runTurn(client: Anthropic, system: string, history: Anthro
       }
     }
     history.push({ role: 'user', content: results }); // all results in one message
-    if (signal.aborted) return ui.notice('Stopped.');
+    if (signal.aborted) { ui.notice('Stopped.'); return true; }
   }
 }
