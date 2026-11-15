@@ -60,7 +60,7 @@ export const byLight = (a: Ranked, b: Ranked) => desc(a.sunPct, b.sunPct) || des
 
 export interface SearchResult {
   centre: TerrainPoint | null;
-  radius_m: number; step_m: number; max_slope_deg: number;
+  radius_m: number; step_m: number; min_spacing_m: number; max_slope_deg: number;
   sampled: number; passed: number;
   candidates: (TerrainPoint & { distance_m: number; bearing_deg: number })[];
 }
@@ -68,14 +68,21 @@ export interface SearchResult {
 /** Grid around (lat, lon) within `radius` m, kept where slope ≤ maxSlope, ranked byLight, top `limit`. Call dem.ensure first. */
 export function terrainSearch(dem: Dem, pgda: Pgda, lat: number, lon: number, radius = 500, maxSlope = 8, limit = 5): SearchResult {
   const centre = terrainAt(dem, pgda, lat, lon);
-  // ponytail: radius/25 keeps the disc under ~2050 samples; candidates may sit next to each other (no min separation)
+  // radius/25 keeps the disc under ~2050 samples
   const step = Math.max(centre?.resolution_m ?? 20, radius / 25);
-  const pts: SearchResult['candidates'] = [];
+  const pts: (SearchResult['candidates'][number] & { de: number; dn: number })[] = [];
   const grid = discGrid(radius, step);
   for (const [de, dn] of grid) {
     const p = terrainAt(dem, pgda, ...offset(lat, lon, Math.atan2(de, dn) / DEG, Math.hypot(de, dn)));
-    if (p && p.slope_deg <= maxSlope) pts.push({ ...p, distance_m: Math.round(Math.hypot(de, dn)), bearing_deg: Math.round((Math.atan2(de, dn) / DEG + 360) % 360) });
+    if (p && p.slope_deg <= maxSlope) pts.push({ ...p, distance_m: Math.round(Math.hypot(de, dn)), bearing_deg: Math.round((Math.atan2(de, dn) / DEG + 360) % 360), de, dn });
   }
   pts.sort(byLight);
-  return { centre, radius_m: radius, step_m: Math.round(step), max_slope_deg: maxSlope, sampled: grid.length, passed: pts.length, candidates: pts.slice(0, limit) };
+  // Greedy pick with a minimum spacing (>= one PGDA pixel, ~120 m) so the results are distinct places, not one pixel.
+  const gap = Math.min(Math.max(3 * step, 150), radius / 2), picked: typeof pts = [];
+  for (const p of pts) {
+    if (picked.length >= limit) break;
+    if (picked.every((q) => Math.hypot(p.de - q.de, p.dn - q.dn) >= gap)) picked.push(p);
+  }
+  const candidates = picked.map(({ de, dn, ...rest }) => rest);
+  return { centre, radius_m: radius, step_m: Math.round(step), min_spacing_m: Math.round(gap), max_slope_deg: maxSlope, sampled: grid.length, passed: pts.length, candidates };
 }
