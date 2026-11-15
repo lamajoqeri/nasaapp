@@ -1,5 +1,7 @@
 // The action layer: every user-visible change goes through one registry, so the UI's buttons and the
 // agent's tools call the same functions. No DOM and no app imports: owners call register() from their own modules.
+// Effort 2: build schemas with schema(props, required) below; strict tool mode rejects minimum/maximum, so check
+// ranges inside run(). snapshot() picks up inspectorState(), skyState() and the view3d getters once they land.
 
 /** The JSON Schema subset the API's strict tool mode accepts (no minimum/maximum: check ranges in run()). */
 export interface PropSchema { type: 'string' | 'number' | 'integer' | 'boolean'; description?: string; enum?: readonly (string | number)[] }
@@ -19,7 +21,7 @@ export interface Action<A = any> {
 
 export const actions = new Map<string, Action>();
 
-export function register(a: Action): void {
+export function register<A = any>(a: Action<A>): void {
   if (!/^[a-z][a-zA-Z0-9]*(\.[a-zA-Z][a-zA-Z0-9]*)*$/.test(a.name)) throw new Error(`Bad action name: ${a.name}`);
   actions.set(a.name, a);
 }
