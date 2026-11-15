@@ -991,7 +991,7 @@ function registerActions() {
     lat: num('Latitude in degrees, -90 to 90 (with lon, instead of id).'),
     lon: num('Longitude in degrees east, -180 to 360.'),
   };
-  const PGDA_NOTE = 'sunPct and earthPct are NASA PGDA long-term averages over all dates (% of time the Sun / Earth is visible, poleward of ~85°S; null outside), unlike scenario metrics, which are for the chosen landing date.';
+  const PGDA_NOTE = 'sunPct and earthPct are NASA PGDA long-term averages over all dates (% of time the Sun / Earth is visible, over the south polar map, to about 80°S; null outside), unlike scenario metrics, which are for the chosen landing date.';
   const UNITS = { elevation_m: 'm vs the 1737.4 km reference radius', slope_deg: 'degrees, central differences over ±1 DEM pixel', resolution_m: 'DEM pixel spacing used, m: 20 in the fine polar tiles, 240 elsewhere near the south pole, several km on the whole-Moon grid away from it', sunPct: '% of time, PGDA average', earthPct: '% of time, PGDA average' };
   register({
     name: 'terrain.sample',

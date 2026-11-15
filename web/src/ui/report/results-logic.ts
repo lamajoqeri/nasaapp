@@ -123,7 +123,7 @@ export function tileAt(tiles: Tile[], lat: number, lon: number): Tile | undefine
 }
 
 /** The validation row that applies to a tile: its own 20 m region, the 240 m-only test for the coarse polar tier,
- *  none for the global model (NASA's maps stop at about 85°S). */
+ *  none for the global model (the NASA maps we ship cover the south polar map, to about 80°S). */
 export function agreementFor(v: ValidationJson, tile: Tile | undefined): { name: string; a: Agreement } | null {
   if (!tile || tile.proj !== 'spstere') return null;
   const id = tile.id.replace(/_20m$/, '');

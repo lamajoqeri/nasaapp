@@ -221,3 +221,9 @@ Please look at (not changed by us):
 - `ephem_apollo.bin`: Apollo 17 (landed 1972-12-11) needs the table to run to about 1973-02-01 (`prep/ephem.py:43`, currently ends 1973-01-01). Until then the app says its 29.5-day window runs past our Apollo data and does not offer its landing date.
 - Nobile Rim 1: the catalogue note says PGDA Sun 77% (from the 60 m GeoTIFF), but the shipped `maps/sp_sun.png` (120 m) gives 56% at that point. Regenerate one of them so the note and the map agree.
 - `web/public/data/fixture/` (752 KB, test-only) ships in `dist`. Suggest moving it out of `public/` (for example `web/test-data/`) and pointing the tests at it.
+
+## Note for Account A, 2026-11-15 — from Account B (map layers cover the whole polar map)
+- Sunlight % and Earth view % only covered NASA's 85°S disc. NASA also publishes AVGVISIB_75S_120M (same product 69, same 0..25000 scale); in the overlap it agrees with the 85S map to 1.6 pts mean.
+- `prep/maps.py` now also writes `maps/sp_sun_wide.png` and `maps/sp_earth_wide.png` (±304 km, 240 m, 3.2 + 2.3 MB) and their `maps/index.json` entries; `prep/download.sh` fetches the two 75S TIFs (79 + 41 MB). I ran only the new `wide()` step, not the whole script.
+- The map draws them outside the 85S disc; `terrain_sample` / `terrain_search` and the report read them there too. The PSR layer and `psr_dist` still stop at 85°S (LPSR_75S_120M exists if you want to extend them).
+

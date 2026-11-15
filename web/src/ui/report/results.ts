@@ -226,7 +226,7 @@ export const sitesSection: SectionFn = async (ctx) => {
   const noMap = xs.filter((_, i) => terr[i]?.sunPct == null).map((x) => x.letter);
   const noDsn = xs.filter((x) => x.sc.base!.mission.commsHours === null).map((x) => x.letter);
   let p = `We study ${xs.length === 1 ? 'one scenario' : `${count(xs.length)} scenarios`}: ${resText}. `;
-  if (noMap.length) p += `${and(noMap)} ${plural(noMap, 'lies', 'lie')} outside NASA's long-term illumination maps, which stop near 85°S ${cite('mazarico2011')}, so there is no NASA value to compare with. `;
+  if (noMap.length) p += `${and(noMap)} ${plural(noMap, 'lies', 'lie')} outside the NASA long-term illumination maps we ship, which cover the south polar map to about 80°S ${cite('mazarico2011')}, so there is no NASA value to compare with. `;
   if (noDsn.length) p += `${and(noDsn)} ${plural(noDsn, 'lands', 'land')} on dates our Deep Space Network table does not cover, so comms there are judged on Earth visibility alone. `;
   if (ctx.skipped.length) p += `Scenario${ctx.skipped.length > 1 ? 's' : ''} ${and(ctx.skipped)} ${plural(ctx.skipped, 'was', 'were')} still computing or failed and ${plural(ctx.skipped, 'is', 'are')} left out.`;
 
@@ -446,7 +446,7 @@ export const confidenceSection: SectionFn = async (ctx) => {
   const rows = [
     ['Terrain model at the site', ...tile.map(model)],
     ['Height error used in the Monte Carlo', ...tile.map((t) => (t ? `${t.sigma_h} m` : '–'))],
-    ['Validation region', ...agr.map((a) => (a ? `${esc(a.name)}<small>${a.a.n} random points</small>` : 'none: NASA maps stop near 85°S'))],
+    ['Validation region', ...agr.map((a) => (a ? `${esc(a.name)}<small>${a.a.n} random points</small>` : 'none: our NASA maps stop near 80°S'))],
     ['Region mean error vs NASA<small>Sun / Earth, percentage points</small>', ...agr.map((a) => (a ? `${f1(a.a.sun.mae)} / ${f1(a.a.earth.mae)}<small>bias ${f1(a.a.sun.bias)} / ${f1(a.a.earth.bias)}</small>` : '–'))],
     [`Monte Carlo spread over ${ctx.missionDays} d<small>power / Earth in view</small>`, ...ws.map((w) => (w.s.powerSd === null ? 'not run'
       : `± ${w.s.powerSd.toFixed(1)} / ± ${w.s.earthSd!.toFixed(1)} pts<small>longest dark ± ${dur(w.s.darkSd ?? 0)}</small>`))],

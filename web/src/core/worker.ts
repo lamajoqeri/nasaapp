@@ -80,8 +80,8 @@ const loadPgda = () => (pgda ??= (async () => {
       return { w: bmp.width, h: bmp.height, bounds: m.bounds, data };
     } catch { return null; }
   };
-  const [sun, earth] = await Promise.all([one('sp_sun'), one('sp_earth')]);
-  return { sun, earth };
+  const [sun, earth, sunWide, earthWide] = await Promise.all(['sp_sun', 'sp_earth', 'sp_sun_wide', 'sp_earth_wide'].map(one));
+  return { sun, earth, sunWide, earthWide };
 })());
 
 async function handle(req: Request): Promise<unknown> {

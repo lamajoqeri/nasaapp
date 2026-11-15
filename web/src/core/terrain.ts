@@ -4,7 +4,8 @@ import { DEG, offset, R, spFwd } from './geom';
 
 /** An 8-bit gray raster in south-polar stereographic metres; bounds are pixel edges [xmin, ymin, xmax, ymax], row 0 = ymax. */
 export interface Raster { w: number; h: number; bounds: number[]; data: Uint8Array }
-export interface Pgda { sun: Raster | null; earth: Raster | null }
+/** sun / earth: NASA's 85°S maps (120 m, 150 km disc). sunWide / earthWide: its 75°S product (240 m) for the rest of the polar map. */
+export interface Pgda { sun: Raster | null; earth: Raster | null; sunWide?: Raster | null; earthWide?: Raster | null }
 export const PGDA_R = 150000; // the data disc the map shows (≈85°S), metres from the pole
 
 export interface TerrainPoint {
@@ -16,11 +17,11 @@ export interface TerrainPoint {
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
-/** PGDA value (0..100 % of time) at a point, nearest pixel; null outside the raster or the 150 km disc. */
-export function pgdaAt(r: Raster | null, lat: number, lon: number): number | null {
+/** PGDA value (0..100 % of time) at a point, nearest pixel; null outside the raster or `maxR` metres from the pole. */
+export function pgdaAt(r: Raster | null, lat: number, lon: number, maxR = PGDA_R): number | null {
   if (!r || lat > -60) return null;
   const [x, y] = spFwd(lat, lon), b = r.bounds;
-  if (Math.hypot(x, y) > PGDA_R || x < b[0] || x > b[2] || y < b[1] || y > b[3]) return null;
+  if (Math.hypot(x, y) > maxR || x < b[0] || x > b[2] || y < b[1] || y > b[3]) return null;
   const c = Math.min(r.w - 1, Math.floor(((x - b[0]) / (b[2] - b[0])) * r.w));
   const k = Math.min(r.h - 1, Math.floor(((b[3] - y) / (b[3] - b[1])) * r.h));
   return (r.data[k * r.w + c] / 255) * 100;
@@ -39,7 +40,8 @@ export function terrainAt(dem: Dem, pgda: Pgda, lat: number, lon: number): Terra
   if (!t) return null;
   const px = t.proj === 'spstere' ? t.px! : (R * DEG) / t.ppd!;
   const slope = slopeAt((a, b) => dem.sample(a, b), lat, lon, px);
-  const s = pgdaAt(pgda.sun, lat, lon), e = pgdaAt(pgda.earth, lat, lon);
+  const s = pgdaAt(pgda.sun, lat, lon) ?? pgdaAt(pgda.sunWide ?? null, lat, lon, Infinity);
+  const e = pgdaAt(pgda.earth, lat, lon) ?? pgdaAt(pgda.earthWide ?? null, lat, lon, Infinity);
   return {
     lat: +lat.toFixed(5), lon: +lon.toFixed(5), elevation_m: r1(h), slope_deg: r1(slope), resolution_m: Math.round(px),
     sunPct: s === null ? null : r1(s), earthPct: e === null ? null : r1(e),

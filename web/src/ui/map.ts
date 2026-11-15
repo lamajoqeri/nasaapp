@@ -212,6 +212,8 @@ const DEFAULT_BOUNDS: Record<string, Bounds> = {
   sp_sun: [-151740, -151740, 151740, 151740],
   sp_earth: [-151740, -151740, 151740, 151740],
   sp_psr: [-151740, -151740, 151740, 151740],
+  sp_sun_wide: [-304080, -304080, 304080, 304080],
+  sp_earth_wide: [-304080, -304080, 304080, 304080],
   elevation: [-304000, -303920, 303920, 304000],
   slope: [-304000, -303920, 303920, 304000],
   global_hillshade: [0, -90, 360, 90],
@@ -219,14 +221,19 @@ const DEFAULT_BOUNDS: Record<string, Bounds> = {
 const FILES: Record<string, string> = {
   sp_hillshade: 'sp_hillshade.png', shackleton_hillshade: 'shackleton_hillshade.png',
   sp_sun: 'sp_sun.png', sp_earth: 'sp_earth.png', sp_psr: 'sp_psr.png', global_hillshade: 'global_hillshade.jpg',
+  sp_sun_wide: 'sp_sun_wide.png', sp_earth_wide: 'sp_earth_wide.png',
 };
 const NAMES: Record<string, string> = {
   sp_hillshade: 'south pole map', shackleton_hillshade: 'Shackleton detail map',
   sp_sun: 'sunlight overlay', sp_earth: 'Earth-view overlay', sp_psr: 'permanent-shadow overlay', global_hillshade: 'whole-Moon map',
+  sp_sun_wide: 'sunlight overlay (outer)', sp_earth_wide: 'Earth-view overlay (outer)',
 };
 
 export type LayerId = 'none' | 'sp_sun' | 'sp_earth' | 'sp_psr' | 'elevation' | 'slope';
 const isPgda = (id: string) => id === 'sp_sun' || id === 'sp_earth' || id === 'sp_psr'; // NASA PGDA image layers, 85°S disc
+/** NASA's coarser 75°S product for the same layer: drawn outside the 85°S disc, so the layer covers the whole map. */
+const WIDE: Partial<Record<string, string>> = { sp_sun: 'sp_sun_wide', sp_earth: 'sp_earth_wide' };
+const wideOf = (id: string) => Object.keys(WIDE).find((k) => WIDE[k] === id) as Layer | undefined;
 /** @deprecated old name */
 export type OverlayId = LayerId;
 type Layer = Exclude<LayerId, 'none'>;
@@ -236,13 +243,14 @@ interface Overlay { canvas: HTMLCanvasElement; w: number; h: number; at(i: numbe
 const DEM_TILE = 'sp_240m';
 const SLOPE_MAX = 20;
 const PGDA_NOTE = 'data poleward of 85°S';
+const PGDA_WIDE_NOTE = 'NASA PGDA; 120 m to 85°S, 240 m beyond';
 const LAYERS: Record<Layer, { label: string; lut: Uint8ClampedArray; ends(lo: number, hi: number): [string, string]; note: string; read(v: number): string }> = {
   sp_sun: {
-    label: 'Sunlight %', lut: rampLut(SUN_RGB), ends: () => ['0%', '100% of time'], note: PGDA_NOTE,
+    label: 'Sunlight %', lut: rampLut(SUN_RGB), ends: () => ['0%', '100% of time'], note: PGDA_WIDE_NOTE,
     read: (v) => `Sun visible ${Math.round(v)}% of the time (NASA average)`,
   },
   sp_earth: {
-    label: 'Earth view %', lut: rampLut(EARTH_RGB), ends: () => ['0%', '100% of time'], note: PGDA_NOTE,
+    label: 'Earth view %', lut: rampLut(EARTH_RGB), ends: () => ['0%', '100% of time'], note: PGDA_WIDE_NOTE,
     read: (v) => `Earth visible ${Math.round(v)}% of the time (NASA average)`,
   },
   sp_psr: { // where the Sun never rises: the cold traps that can hold water ice
@@ -324,6 +332,7 @@ export function mountMap(el: HTMLElement, opts: {
   const images: Record<string, HTMLImageElement> = {};
   const requested = new Set<string>();
   const overlays: Partial<Record<Layer, Overlay>> = {};
+  const wide: Partial<Record<Layer, Overlay>> = {}; // outer part of a layer (WIDE), keyed by the layer it extends
   const building = new Set<Layer>();             // DEM layers being fetched/computed
   let detail: CanvasImageSource | null = null;   // Shackleton map, matched + feathered into the base
   const errors = new Set<string>();
@@ -366,12 +375,16 @@ export function mountMap(el: HTMLElement, opts: {
       if (isPgda(id)) {
         try { overlays[id as Layer] = buildOverlay(img, LAYERS[id as Layer].lut, bounds[id]); } catch { fail(NAMES[id]); }
       }
+      const outer = wideOf(id);
+      if (outer) {
+        try { wide[outer] = buildOverlay(img, LAYERS[outer].lut, bounds[id], true); } catch { fail(NAMES[id]); }
+      }
       // Build the blended detail once both images are in, here rather than in the draw path (4M-pixel loop).
       const d = images.shackleton_hillshade, base = images.sp_hillshade;
       if ((id === 'shackleton_hillshade' || id === 'sp_hillshade') && d && base && !detail) {
         try { detail = buildDetail(d, bounds.shackleton_hillshade, base, bounds.sp_hillshade); } catch { detail = d; }
       }
-      refreshLoading(); draw();
+      refreshLoading(); if (isPgda(id)) syncChrome(); draw(); // the legend's ends wait for the layer
     };
     img.onerror = () => { if (!dead) { fail(NAMES[id]); refreshLoading(); } };
     img.src = opts.dataBase + 'maps/' + FILES[id];
@@ -431,7 +444,7 @@ export function mountMap(el: HTMLElement, opts: {
     .finally(() => {
       if (dead) return;
       indexReady = true;
-      load('sp_hillshade'); load('sp_sun'); load('sp_earth'); load('sp_psr');
+      load('sp_hillshade'); load('sp_sun'); load('sp_earth'); load('sp_psr'); load('sp_sun_wide'); load('sp_earth_wide');
       if (mode === 'global') load('global_hillshade');
       layout();
     });
@@ -566,12 +579,11 @@ export function mountMap(el: HTMLElement, opts: {
         const d = images.shackleton_hillshade;
         if (detail) drawGeo(detail, d.naturalWidth, d.naturalHeight, sb);
       }
-      const ov = overlay !== 'none' ? overlays[overlay] : undefined;
-      if (ov) {
-        ctx.globalAlpha = OVERLAY_ALPHA;
-        drawGeo(ov.canvas, ov.w, ov.h, bounds[overlay]);
-        ctx.globalAlpha = 1;
-      }
+      const ov = overlay !== 'none' ? overlays[overlay] : undefined, wv = overlay !== 'none' ? wide[overlay] : undefined;
+      ctx.globalAlpha = OVERLAY_ALPHA;
+      if (wv) drawGeo(wv.canvas, wv.w, wv.h, bounds[WIDE[overlay]!]);
+      if (ov) drawGeo(ov.canvas, ov.w, ov.h, bounds[overlay]);
+      ctx.globalAlpha = 1;
     }
 
     ctx.font = FONT;
@@ -659,9 +671,12 @@ export function mountMap(el: HTMLElement, opts: {
 
   /** Layer value at map point (x, y), null outside its coverage or before it's built. */
   function pct(id: Layer, x: number, y: number): number | null {
-    const o = overlays[id];
-    if (isPgda(id) && Math.hypot(x, y) > OVERLAY_R) return null; // outside the drawn (faded) disc
-    const p = o && imgPixel(bounds[id], o.w, o.h, x, y);
+    let o = overlays[id], b = bounds[id];
+    if (isPgda(id) && Math.hypot(x, y) > OVERLAY_R) { // outside the fine disc: the wide map, where the layer has one
+      o = wide[id]; b = bounds[WIDE[id] ?? ''];
+      if (!o || !b) return null;
+    }
+    const p = o && imgPixel(b, o.w, o.h, x, y);
     return o && p ? o.at(p[1] * o.w + p[0]) : null;
   }
 
@@ -861,10 +876,11 @@ function canvasOf(src: CanvasImageSource, w: number, h: number, sx = 0, sy = 0, 
 
 /**
  * Recolour an overlay's gray channel through `lut`, once, and mask it to a feathered disc of
- * radius OVERLAY_R around the pole (the PGDA square's corners would otherwise end in a hard edge).
+ * radius OVERLAY_R around the pole (the PGDA square's corners would otherwise end in a hard edge),
+ * or with `outside`, to everything beyond that disc (the wide 75°S map that continues the layer).
  * Gray 0 is real data (never lit / never sees Earth), not nodata — the PGDA PNGs have no nodata.
  */
-function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds): Overlay {
+function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds, outside = false): Overlay {
   const w = img.naturalWidth, h = img.naturalHeight;
   const { canvas, g, im } = canvasOf(img, w, h), px = im.data;
   const kx = (b[2] - b[0]) / w, ky = (b[3] - b[1]) / h;
@@ -873,7 +889,8 @@ function buildOverlay(img: HTMLImageElement, lut: Uint8ClampedArray, b: Bounds):
     const v = (data[i] = px[j]);
     px[j] = lut[v * 3]; px[j + 1] = lut[v * 3 + 1]; px[j + 2] = lut[v * 3 + 2];
     const x = b[0] + ((i % w) + 0.5) * kx, y = b[3] - (Math.floor(i / w) + 0.5) * ky;
-    px[j + 3] = 255 * feather(OVERLAY_R - Math.hypot(x, y), OVERLAY_FEATHER);
+    const f = feather(OVERLAY_R - Math.hypot(x, y), OVERLAY_FEATHER);
+    px[j + 3] = 255 * (outside ? 1 - f : f); // `outside`: the wide map, faded in where the disc fades out
   }
   g.putImageData(im, 0, 0);
   return { canvas, w, h, at: (i) => (data[i] / 255) * 100, lo: 0, hi: 100 };

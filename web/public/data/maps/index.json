@@ -52,6 +52,34 @@
   ]
  },
  {
+  "id": "sp_sun_wide",
+  "file": "sp_sun_wide.png",
+  "proj": "spstere",
+  "kind": "avg_sun_visibility",
+  "scale": "0..255 = 0..100% of time",
+  "source": "NASA PGDA product 69, Mazarico et al. 2011 (75S 120 m product, averaged to 240 m)",
+  "bounds": [
+   -304080.0,
+   -304080.0,
+   304080.0,
+   304080.0
+  ]
+ },
+ {
+  "id": "sp_earth_wide",
+  "file": "sp_earth_wide.png",
+  "proj": "spstere",
+  "kind": "avg_earth_visibility",
+  "scale": "0..255 = 0..100% of time",
+  "source": "NASA PGDA product 69, Mazarico et al. 2011 (75S 120 m product, averaged to 240 m)",
+  "bounds": [
+   -304080.0,
+   -304080.0,
+   304080.0,
+   304080.0
+  ]
+ },
+ {
   "id": "sp_psr",
   "file": "sp_psr.png",
   "proj": "spstere",

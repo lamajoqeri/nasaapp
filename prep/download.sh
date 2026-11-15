@@ -21,6 +21,8 @@ get . https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ.TIF
 # Validation targets (Mazarico 2011): DN * 0.00004 = fraction of time visible
 get . https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608.TIF
 get . https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_85S_060M_201608_EARTH.TIF
+get . https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_75S_120M_201608.TIF
+get . https://pgda.gsfc.nasa.gov/data/MoonIllumination/AVGVISIB_75S_120M_201608_EARTH.TIF
 # Permanently shadowed regions (same product): positive where the Sun is never visible
 get . https://pgda.gsfc.nasa.gov/data/MoonIllumination/LPSR_85S_060M_201608.TIF
 # 20 m tiles are read by window from LDEM_80S_20MPP_ADJ.TIF over /vsicurl/ in prep/dem.py (no 2.7 GB download)

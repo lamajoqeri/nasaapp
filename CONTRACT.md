@@ -173,7 +173,7 @@ Same format as `ephem.bin`, hourly 1969-07-01 .. 1973-01-01, for showing the Apo
 
 Base maps for the site picker: `{id, file, proj, kind, bounds}`; `bounds` = `[x_min, y_min, x_max, y_max]` in spstere meters
 (or `bounds_deg` for the equirectangular global map, longitude 0..360 left to right). `sp_hillshade`, `shackleton_hillshade`, `global_hillshade`
-are orientation hillshades (artificial light, not a prediction). `sp_sun` / `sp_earth` are NASA PGDA average visibility, 0..255 = 0..100% of the time.
+are orientation hillshades (artificial light, not a prediction). `sp_sun` / `sp_earth` are NASA PGDA average visibility, 0..255 = 0..100% of the time. `sp_sun_wide` / `sp_earth_wide` are the same quantity from NASA's AVGVISIB_75S_120M product, cut to ±304,080 m and averaged to 240 m; the app draws and reads them outside the 150 km disc of the finer 85S maps.
 
 ### `psr_dist.bin` + `psr_dist.json`, `maps/sp_psr.png`
 
