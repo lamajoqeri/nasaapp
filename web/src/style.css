@@ -65,10 +65,11 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: var
 .insp { grid-area: 2 / 3; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
 .sheet { grid-area: 2 / 2 / 3 / 4; z-index: 5; }
 .dock { grid-column: 1 / -1; grid-row: 3; border-top: 1px solid var(--line); display: grid; grid-template-columns: var(--rail) minmax(0, 1fr) var(--insp); }
-.evpage { grid-area: 2 / 1 / 4 / -1; overflow: auto; padding: 0 24px; display: none; }
-.shell[data-view=evidence] > :is(.rail, .stage, .insp, .sheet, .dock) { display: none; }
-.shell[data-view=evidence] .evpage { display: block; }
-.shell[data-view=evidence] :is(.clock, #cmp) { display: none; }
+.rpage { grid-area: 2 / 1 / 4 / -1; overflow: auto; display: none; background: #e9ebee; }
+.shell[data-view=report] > :is(.rail, .stage, .insp, .sheet, .dock) { display: none; }
+.shell[data-view=report] .rpage { display: block; }
+.rpage .r-wait { max-width: 760px; margin: 24px auto; padding: 0 16px; color: #4a4f57; }
+.shell[data-view=report] :is(.clock, #cmp) { display: none; }
 .fatal { grid-area: 2 / 1 / 4 / -1; z-index: 9; display: grid; place-items: center; background: var(--bg); color: var(--bad); padding: 24px; text-align: center; }
 .fatal:empty { display: none; }
 
@@ -320,7 +321,7 @@ table.cmp { width: 100%; border-collapse: collapse; font-variant-numeric: tabula
   .cmp thead td { width: auto; }
   .cmp tbody th { white-space: normal; max-width: 116px; }
   .cmp tbody th small { display: none; }
-  .evpage { order: 5; overflow: visible; padding: 0 16px; }
+  .rpage { order: 5; overflow: visible; }
 }
 @media (max-width: 640px) {
   .brand span, .clock { display: none; }

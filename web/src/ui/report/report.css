@@ -1,0 +1,22 @@
+/* Report: a paper on white, whatever the app theme. Owner: shell agent. Numbering by CSS counters. */
+.report { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; background: #fff; color: #1b1d21; font: 16px/1.6 Charter, 'Iowan Old Style', Georgia, serif; counter-reset: sec fig tab; }
+.report h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+.report .r-sec { counter-increment: sec; margin-top: 32px; }
+.report .r-sec h2::before { content: counter(sec) '. '; }
+.report #r-abstract { counter-increment: none; }
+.report #r-abstract h2::before, .report #r-refs h2::before { content: none; }
+.report .r-fig { counter-increment: fig; margin: 20px 0; }
+.report .r-fig img { display: block; max-width: 100%; height: auto; border-radius: 4px; }
+.report .r-fig figcaption { font-size: 14px; color: #4a4f57; margin-top: 6px; }
+.report .r-fig figcaption::before { content: 'Figure ' counter(fig) '. '; font-weight: 600; }
+.report .r-tab { counter-increment: tab; border-collapse: collapse; width: 100%; font-size: 14px; }
+.report .r-tab caption { caption-side: top; text-align: left; font-size: 14px; color: #4a4f57; padding-bottom: 6px; }
+.report .r-tab caption::before { content: 'Table ' counter(tab) '. '; font-weight: 600; color: #1b1d21; }
+.report .r-tab th, .report .r-tab td { border-bottom: 1px solid #d9dce1; padding: 4px 8px; text-align: left; vertical-align: top; }
+.report .r-tabwrap { overflow-x: auto; margin: 20px 0; }
+.report .r-chip { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 4px; background: #1b1d21; color: var(--c); font: 600 12px/1 system-ui, sans-serif; }
+.report .cite a { color: inherit; }
+.report .r-status { color: #6b7079; font-style: italic; }
+.report .r-err { color: #b3261e; }
+.report .r-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+@media print { .r-bar { display: none; } }
